@@ -1,5 +1,7 @@
+fastapi
+uvicorn
+pydantic
 pandas
+numpy
 xgboost
-streamlit
-scikit-learn
 joblib
