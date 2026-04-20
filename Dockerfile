@@ -15,4 +15,4 @@ COPY . .
 ENV PORT 8080
 
 # Run the web service using Uvicorn
-CMD exec uvicorn api:app --host 0.0.0.0 --port $PORT
+CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
