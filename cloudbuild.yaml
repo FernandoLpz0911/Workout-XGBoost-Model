@@ -1,0 +1,8 @@
+steps:
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '--no-cache', '-t', '$_IMAGE_NAME', '.']
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '$_IMAGE_NAME']
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  entrypoint: gcloud
+  args: ['run', 'services', 'update', 'workoutmodel', '--image', '$_IMAGE_NAME', '--region', 'us-central1']
