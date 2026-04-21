@@ -3,7 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import joblib
-from pipeline import run_pipeline 
+from pipeline import run_pipeline
+import os
 
 app = FastAPI(title="AI Workout API")
 
@@ -39,7 +40,10 @@ try:
     feature_cols = joblib.load('feature_cols.joblib')
     workout_summary = pd.read_csv('Processed_Workout_Data.csv', parse_dates=['Date'])
 except Exception as e:
-    print(f"Error loading assets: {e}. Make sure pipeline.py has been run.")
+    print(f"WARNING: Could not load assets: {e}")
+    model = None
+    feature_cols = None
+    workout_summary = None
 
 def get_weight(one_rm, reps): 
     return one_rm / (1 + 0.0333 * reps)
