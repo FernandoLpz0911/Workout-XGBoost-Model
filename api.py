@@ -1,11 +1,20 @@
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import joblib
 
 app = FastAPI(title="AI Workout API")
 
-# --- 1. Load Pre-trained Assets ---
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"], # Allows all origins (Change to your Vercel URL later for security)
+    allow_credentials=True,
+    allow_methods=["*"], # Allows all methods (GET, POST, etc.)
+    allow_headers=["*"],
+)
+
+# Load assets
 try:
     model = joblib.load('xgb_model.joblib')
     feature_cols = joblib.load('feature_cols.joblib')

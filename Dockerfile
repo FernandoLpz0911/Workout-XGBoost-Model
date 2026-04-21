@@ -8,11 +8,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy the rest of your code (api.py, models, csv, etc.)
+# Copy the rest of your code
 COPY . .
 
-# Expose the port FastAPI will run on
-ENV PORT 8080
+# Cloud providers inject their own PORT, but we set a fallback
+ENV PORT=8080
 
-# Run the web service using Uvicorn
-CMD ["streamlit", "run", "app.py", "--server.port=8080", "--server.address=0.0.0.0"]
+# Run the FastAPI server
+CMD uvicorn api:app --host 0.0.0.0 --port ${PORT}
