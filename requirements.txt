@@ -3,7 +3,7 @@ uvicorn
 pydantic
 pandas
 numpy
-xgboost
+xgboost==2.1.4
 joblib
 scikit-learn
 streamlit
