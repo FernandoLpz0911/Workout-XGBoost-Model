@@ -7,3 +7,5 @@ xgboost
 joblib
 scikit-learn
 streamlit
+file_picker
+fl_chart

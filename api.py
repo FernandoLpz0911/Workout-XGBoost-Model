@@ -3,16 +3,35 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
 import joblib
+from pipeline import run_pipeline 
 
 app = FastAPI(title="AI Workout API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"], # Allows all origins (Change to your Vercel URL later for security)
+    allow_origins=["https://workout-neural-network.vercel.app", "http://localhost:8080", "http://localhost:35625"],
     allow_credentials=True,
-    allow_methods=["*"], # Allows all methods (GET, POST, etc.)
+    allow_methods=["*"], 
     allow_headers=["*"],
 )
+@app.post("/train")
+async def train_model(file: UploadFile = File(...)):
+    if not file.filename.endswith('.csv'):
+        raise HTTPException(status_code=400, detail="Only CSV files are allowed.")
+    
+    try:
+        # Pass the file-like object directly to your pipeline
+        run_pipeline(file.file)
+        
+        # Reload the newly trained assets into global variables so the API uses them immediately
+        global model, feature_cols, workout_summary
+        model = joblib.load('xgb_model.joblib')
+        feature_cols = joblib.load('feature_cols.joblib')
+        workout_summary = pd.read_csv('Processed_Workout_Data.csv', parse_dates=['Date'])
+        
+        return {"message": "Model successfully trained and updated!"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error during training: {str(e)}")
 
 # Load assets
 try:
