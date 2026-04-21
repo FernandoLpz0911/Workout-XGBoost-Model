@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import pandas as pd
@@ -9,8 +9,8 @@ app = FastAPI(title="AI Workout API")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://workout-neural-network.vercel.app", "http://localhost:8080", "http://localhost:35625"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"], 
     allow_headers=["*"],
 )

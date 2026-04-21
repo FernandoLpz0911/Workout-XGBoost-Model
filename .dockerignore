@@ -1,0 +1,14 @@
+# .dockerignore
+app/
+android/
+ios/
+web/
+linux/
+macos/
+windows/
+build/
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+*.png
+*.svg
