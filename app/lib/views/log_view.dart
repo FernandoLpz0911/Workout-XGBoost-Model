@@ -201,7 +201,7 @@ class _ExerciseCard extends StatelessWidget {
         onSave: (set) => vm.logSet(index, set),
       ),
     ).then((saved) {
-      if (saved == true) timer.start();
+      if (saved == true && timer.autoStartEnabled) timer.start();
     });
   }
 }
