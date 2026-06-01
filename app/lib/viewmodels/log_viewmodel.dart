@@ -41,11 +41,55 @@ class LogViewModel extends ChangeNotifier {
   String? lastActionMessage;
   int localSetCount = 0;
 
-  static const _alwaysCategories = {'Cardio', 'Passive'};
   static const _presetExercises = <String, List<String>>{
-    'Cardio': ['Cycling', 'General Running', 'Jump Rope', 'Swimming'],
-    'Passive': ['Ice Bath', 'Sauna', 'Stretching'],
+    'Back': [
+      'Barbell Row', 'Deadlift', 'Face Pull', 'Hyperextension',
+      'Lat Pulldown', 'Pull Up', 'Seated Cable Row',
+      'Single Arm Dumbbell Row', 'T-Bar Row',
+    ],
+    'Biceps': [
+      'Barbell Curl', 'Cable Curl', 'Concentration Curl',
+      'Dumbbell Curl', 'EZ Bar Curl', 'Hammer Curl',
+      'Incline Dumbbell Curl', 'Preacher Curl',
+    ],
+    'Cardio': [
+      'Cycling', 'Elliptical', 'General Running', 'Jump Rope',
+      'Rowing Machine', 'Stair Climber', 'Swimming',
+    ],
+    'Chest': [
+      'Bench Press', 'Cable Fly', 'Chest Dip', 'Decline Bench Press',
+      'Dumbbell Fly', 'Incline Bench Press', 'Incline Dumbbell Press',
+      'Pec Deck', 'Push Up',
+    ],
+    'Core': [
+      'Ab Wheel', 'Cable Crunch', 'Crunch', 'Hanging Leg Raise',
+      'Leg Raise', 'Plank', 'Russian Twist', 'Side Plank',
+    ],
+    'Forearms': [
+      'Barbell Wrist Curl', 'Farmer\'s Walk', 'Reverse Curl',
+      'Reverse Wrist Curl',
+    ],
+    'Legs': [
+      'Bulgarian Split Squat', 'Calf Raise', 'Glute Bridge',
+      'Hack Squat', 'Leg Curl', 'Leg Extension', 'Leg Press',
+      'Lunge', 'Romanian Deadlift', 'Squat',
+    ],
+    'Passive': [
+      'Foam Rolling', 'Ice Bath', 'Sauna', 'Stretching',
+    ],
+    'Shoulders': [
+      'Arnold Press', 'Front Raise', 'Lateral Raise',
+      'Overhead Press', 'Rear Delt Fly', 'Shrug', 'Upright Row',
+    ],
+    'Triceps': [
+      'Cable Tricep Pushdown', 'Close Grip Bench Press',
+      'Diamond Push Up', 'Overhead Tricep Extension',
+      'Skull Crusher', 'Tricep Dip',
+    ],
   };
+
+  // All categories with presets are always shown, even with no history.
+  static final _alwaysCategories = _presetExercises.keys.toSet();
 
   LogViewModel() {
     _initialize();
