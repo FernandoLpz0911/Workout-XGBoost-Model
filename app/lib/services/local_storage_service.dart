@@ -43,12 +43,16 @@ class LocalStorageService {
     return const Utf8Encoder().convert('$header\n$rows\n');
   }
 
-  /// Parses a FitNotes CSV export and merges it into local storage.
-  /// Handles strength (weight+reps), cardio (distance+time), and passive (time).
+  /// Parses a FitNotes CSV export and merges only new rows into local storage.
+  /// Duplicate detection uses a fingerprint of date (day only) + all data fields.
   Future<int> importFromCsvText(String csvText) async {
     final lines = csvText.replaceAll('\r\n', '\n').split('\n');
     if (lines.length < 2) return 0;
-    final sets = <WorkoutSet>[];
+
+    final existing = await loadAll();
+    final seen = existing.map(_fingerprint).toSet();
+
+    final newSets = <WorkoutSet>[];
     for (final line in lines.skip(1)) {
       if (line.trim().isEmpty) continue;
       try {
@@ -65,8 +69,7 @@ class LocalStorageService {
             (p.length > 7 && p[7].trim().isNotEmpty) ? p[7].trim() : null;
         final duration =
             (p.length > 8 && p[8].trim().isNotEmpty) ? p[8].trim() : null;
-        final comment =
-            p.length > 9 ? p[9].trim() : '';
+        final comment = p.length > 9 ? p[9].trim() : '';
 
         // Skip rows that have nothing useful at all
         final hasStrength = weight > 0 || reps > 0;
@@ -74,7 +77,7 @@ class LocalStorageService {
         final hasDuration = duration != null;
         if (!hasStrength && !hasCardio && !hasDuration) continue;
 
-        sets.add(WorkoutSet(
+        final set = WorkoutSet(
           date: DateTime.parse(p[0].trim()),
           exercise: p[1].trim(),
           category: p[2].trim(),
@@ -84,13 +87,29 @@ class LocalStorageService {
           distanceUnit: distanceUnit,
           duration: duration,
           comment: comment,
-        ));
+        );
+
+        final key = _fingerprint(set);
+        if (seen.add(key)) {
+          // seen.add returns true only when the key is new
+          newSets.add(set);
+        }
       } catch (_) {
         continue;
       }
     }
-    if (sets.isNotEmpty) await appendSets(sets);
-    return sets.length;
+    if (newSets.isNotEmpty) await saveAll([...existing, ...newSets]);
+    return newSets.length;
+  }
+
+  /// Fingerprint for duplicate detection.
+  /// Uses day-level date because FitNotes exports dates without time.
+  static String _fingerprint(WorkoutSet s) {
+    final d = s.date;
+    final day =
+        '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+    return '$day|${s.exercise}|${s.category}|${s.weight}|${s.reps}'
+        '|${s.distance}|${s.distanceUnit}|${s.duration}|${s.comment}';
   }
 
   static List<String> _parseCsvLine(String line) {
