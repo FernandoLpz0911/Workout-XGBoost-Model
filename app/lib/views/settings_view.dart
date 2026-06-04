@@ -2,7 +2,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
-import '../viewmodels/log_viewmodel.dart';
+import 'package:exercise_analyzer/viewmodels/log_viewmodel.dart';
 
 /// Settings screen: local data stats, FitNotes CSV import, optional cloud
 /// model retraining, and data deletion.

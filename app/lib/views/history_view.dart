@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/workout_set.dart';
-import '../viewmodels/log_viewmodel.dart';
+import 'package:exercise_analyzer/models/workout_set.dart';
+import 'package:exercise_analyzer/viewmodels/log_viewmodel.dart';
 
 /// Displays the full workout history grouped by date, then by exercise.
 class HistoryView extends StatelessWidget {

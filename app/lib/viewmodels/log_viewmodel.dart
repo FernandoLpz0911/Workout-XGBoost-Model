@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
-import '../models/recommendation_models.dart';
-import '../models/workout_set.dart';
-import '../services/api_service.dart';
-import '../services/local_recommendation_engine.dart';
-import '../services/local_storage_service.dart';
+import 'package:exercise_analyzer/models/recommendation_models.dart';
+import 'package:exercise_analyzer/models/workout_set.dart';
+import 'package:exercise_analyzer/services/api_service.dart';
+import 'package:exercise_analyzer/services/local_recommendation_engine.dart';
+import 'package:exercise_analyzer/services/local_storage_service.dart';
 
 export '../models/recommendation_models.dart' show TrainingMode;
 
