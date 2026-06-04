@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../models/recommendation_models.dart';
-import '../models/workout_set.dart';
-import '../services/rest_timer.dart';
-import '../viewmodels/log_viewmodel.dart';
+import 'package:exercise_analyzer/models/recommendation_models.dart';
+import 'package:exercise_analyzer/models/workout_set.dart';
+import 'package:exercise_analyzer/services/rest_timer.dart';
+import 'package:exercise_analyzer/viewmodels/log_viewmodel.dart';
 
 export '../viewmodels/log_viewmodel.dart' show TrainingMode;
 

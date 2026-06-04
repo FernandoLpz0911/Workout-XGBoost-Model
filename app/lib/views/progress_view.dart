@@ -2,9 +2,9 @@ import 'dart:math';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import '../services/local_recommendation_engine.dart';
-import '../models/workout_set.dart';
-import '../viewmodels/log_viewmodel.dart';
+import 'package:exercise_analyzer/services/local_recommendation_engine.dart';
+import 'package:exercise_analyzer/models/workout_set.dart';
+import 'package:exercise_analyzer/viewmodels/log_viewmodel.dart';
 
 /// Progress charts for strength exercises — estimated 1RM, max weight, or
 /// total volume over a selectable time range.
