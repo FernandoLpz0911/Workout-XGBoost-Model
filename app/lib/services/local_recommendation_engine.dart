@@ -42,19 +42,23 @@ class LocalRecommendationEngine {
   // RegExp patterns mirror the ones used in pipeline.py so signal detection
   // stays consistent between the offline engine and cloud model.
 
-  static final Pattern _formIssueRe = RegExp(
+  // ignore: deprecated_member_use
+  static final _formIssueRe = RegExp(
     r"did it wrong|wrong|unsure|too heavy|failed|couldn't|sloppy|"
     r'lost balance|form is\s*(off|weird|bad)|injury',
     caseSensitive: false,
   );
-  static final Pattern _fatigueRe = RegExp(
+  // ignore: deprecated_member_use
+  static final _fatigueRe = RegExp(
     r'forearm|fatigued|tired|gave out|grip\s*(loose|gave|gone|tiring)|'
     r'arms gave|tiring out',
     caseSensitive: false,
   );
-  static final Pattern _dropSetRe =
+  static final _dropSetRe =
+      // ignore: deprecated_member_use
       RegExp(r'drop\s*set|no rest', caseSensitive: false);
-  static final Pattern _warmupRe =
+  static final _warmupRe =
+      // ignore: deprecated_member_use
       RegExp(r'warm[\s-]?up', caseSensitive: false);
 
   static bool _isFormIssue(String c) => c.contains(_formIssueRe);
