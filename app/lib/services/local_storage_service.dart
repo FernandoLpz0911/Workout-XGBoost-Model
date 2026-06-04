@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:exercise_analyzer/models/workout_set.dart';
+import 'package:repiq/models/workout_set.dart';
 
 /// Persists all local workout data using [SharedPreferences].
 ///

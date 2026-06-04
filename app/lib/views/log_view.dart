@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:exercise_analyzer/models/recommendation_models.dart';
-import 'package:exercise_analyzer/models/workout_set.dart';
-import 'package:exercise_analyzer/services/rest_timer.dart';
-import 'package:exercise_analyzer/viewmodels/log_viewmodel.dart';
+import 'package:repiq/models/recommendation_models.dart';
+import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/rest_timer.dart';
+import 'package:repiq/viewmodels/log_viewmodel.dart';
+import 'package:repiq/viewmodels/subscription_viewmodel.dart';
+import 'package:repiq/views/paywall_view.dart';
 
-export '../viewmodels/log_viewmodel.dart' show TrainingMode;
+export 'package:repiq/viewmodels/log_viewmodel.dart' show TrainingMode;
 
 /// Main workout logging screen. Shows today's session exercises and lets the
 /// user add exercises, log sets, edit or delete sets, and start the rest timer.
@@ -137,11 +139,17 @@ class _ExerciseCard extends StatelessWidget {
               const SizedBox(height: 10),
               _TrainingModeToggle(
                 mode: ex.trainingMode,
+                isPremium: context.watch<SubscriptionViewModel>().isPremium,
                 onChanged: (mode) => vm.setTrainingMode(index, mode),
+                onUpgrade: () => PaywallView.show(context),
               ),
             ],
             const SizedBox(height: 12),
-            _RecBanner(ex: ex),
+            _RecBanner(
+              ex: ex,
+              isPremium: context.watch<SubscriptionViewModel>().isPremium,
+              onUpgrade: () => PaywallView.show(context),
+            ),
             if (ex.sets.isNotEmpty) ...[
               const SizedBox(height: 12),
               const Divider(),
@@ -234,7 +242,13 @@ class _ExerciseCard extends StatelessWidget {
 
 class _RecBanner extends StatelessWidget {
   final SessionExercise ex;
-  const _RecBanner({required this.ex});
+  final bool isPremium;
+  final VoidCallback onUpgrade;
+  const _RecBanner({
+    required this.ex,
+    required this.isPremium,
+    required this.onUpgrade,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -289,12 +303,23 @@ class _RecBanner extends StatelessWidget {
             ],
           ),
         ),
-        if (rec.notesInsight.isNotEmpty) ...[
+        if (isPremium && rec.notesInsight.isNotEmpty) ...[
           const SizedBox(height: 8),
           _InfoChip(
               color: Colors.amber,
               icon: Icons.notes,
               text: rec.notesInsight),
+        ],
+        if (!isPremium) ...[
+          const SizedBox(height: 8),
+          GestureDetector(
+            onTap: onUpgrade,
+            child: _InfoChip(
+              color: Colors.purple,
+              icon: Icons.lock_outline,
+              text: 'Premium: form & fatigue analysis, advanced AI insights',
+            ),
+          ),
         ],
       ],
     );
@@ -490,7 +515,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
       children: [
         DropdownButtonFormField<String>(
           decoration: const InputDecoration(labelText: 'Category'),
-          initialValue: _category,
+          value: _category,
           items: categories
               .map((c) => DropdownMenuItem(value: c, child: Text(c)))
               .toList(),
@@ -503,7 +528,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           decoration: const InputDecoration(labelText: 'Exercise'),
-          initialValue: _exercise,
+          value: _exercise,
           items: exercises
               .map((e) => DropdownMenuItem(value: e, child: Text(e)))
               .toList(),
@@ -878,11 +903,41 @@ class _StepBtn extends StatelessWidget {
 
 class _TrainingModeToggle extends StatelessWidget {
   final TrainingMode mode;
+  final bool isPremium;
   final void Function(TrainingMode) onChanged;
-  const _TrainingModeToggle({required this.mode, required this.onChanged});
+  final VoidCallback onUpgrade;
+  const _TrainingModeToggle({
+    required this.mode,
+    required this.isPremium,
+    required this.onChanged,
+    required this.onUpgrade,
+  });
 
   @override
   Widget build(BuildContext context) {
+    if (!isPremium) {
+      return GestureDetector(
+        onTap: onUpgrade,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.purple.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: const [
+              Icon(Icons.lock_outline, size: 14, color: Colors.purple),
+              SizedBox(width: 6),
+              Text('Training Mode — Premium feature',
+                  style: TextStyle(fontSize: 12, color: Colors.purple)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return SegmentedButton<TrainingMode>(
       segments: const [
         ButtonSegment(

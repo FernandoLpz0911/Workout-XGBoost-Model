@@ -1,9 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
-import 'package:exercise_analyzer/models/recommendation_models.dart';
-import 'package:exercise_analyzer/models/workout_set.dart';
-import 'package:exercise_analyzer/services/api_service.dart';
-import 'package:exercise_analyzer/services/local_recommendation_engine.dart';
-import 'package:exercise_analyzer/services/local_storage_service.dart';
+import 'package:repiq/models/recommendation_models.dart';
+import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/api_service.dart';
+import 'package:repiq/services/local_recommendation_engine.dart';
+import 'package:repiq/services/local_storage_service.dart';
 
 export '../models/recommendation_models.dart' show TrainingMode;
 
@@ -383,13 +384,17 @@ class LogViewModel extends ChangeNotifier {
 
   /// Exports local data as CSV and POSTs it to the cloud `/train` endpoint
   /// to retrain the XGBoost model. The on-device engine is unaffected.
+  /// Exports local data as CSV and POSTs it to the cloud `/train` endpoint
+  /// to retrain the XGBoost model. Attaches a Firebase ID token so the backend
+  /// can verify the caller's identity and subscription status.
   Future<void> trainOnLocalData() async {
     isTraining = true;
     lastActionMessage = null;
     notifyListeners();
     try {
       final bytes = await _storage.exportAsCsvBytes();
-      await _api.trainFromCsvBytes(bytes);
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      await _api.trainFromCsvBytes(bytes, authToken: token);
       lastActionMessage =
           'Cloud model retrained on $localSetCount sets. '
           'Local recommendations already use all your data automatically.';
