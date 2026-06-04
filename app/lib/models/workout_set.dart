@@ -1,18 +1,33 @@
+/// A single logged entry — one set, lap, or passive session.
+///
+/// Covers three exercise types:
+/// - **Strength**: [weight] + [reps]
+/// - **Cardio**: [distance] + [distanceUnit] + optional [duration]
+/// - **Passive**: [duration] only (sauna, stretching, foam rolling, etc.)
 class WorkoutSet {
+  /// Timestamp when this entry was logged.
+  ///
+  /// Stored as full ISO 8601 (including milliseconds) so it can serve as a
+  /// primary key for edit and delete operations.
   final DateTime date;
+
   final String exercise;
   final String category;
 
-  // Strength fields (0 for non-strength)
+  /// Weight lifted in lbs. 0 for bodyweight or non-strength exercises.
   final double weight;
+
+  /// Reps completed. 0 for non-strength exercises.
   final int reps;
 
-  // Cardio fields (null for non-cardio)
+  /// Distance covered. Non-null only for cardio exercises.
   final double? distance;
-  final String? distanceUnit; // "mi" or "km"
 
-  // Duration: used by cardio (lap time), passive (session time),
-  // and time-based strength (Dead Hang etc.)  Format: "H:MM:SS"
+  /// Distance unit: `"mi"` or `"km"`. Non-null when [distance] is set.
+  final String? distanceUnit;
+
+  /// Duration in `"H:MM:SS"` format. Used by cardio (lap time), passive
+  /// (session time), and time-based strength exercises such as Dead Hang.
   final String? duration;
 
   final String comment;
@@ -29,10 +44,8 @@ class WorkoutSet {
     this.comment = '',
   });
 
-  // ── Serialisation ─────────────────────────────────────────────────────────
-
   Map<String, dynamic> toJson() => {
-        // Full ISO 8601 so we can match by exact millisecond on delete
+        // Full ISO 8601 so we can match by exact millisecond on delete/edit
         'date': date.toIso8601String(),
         'exercise': exercise,
         'category': category,
@@ -45,7 +58,7 @@ class WorkoutSet {
       };
 
   factory WorkoutSet.fromJson(Map<String, dynamic> j) => WorkoutSet(
-        // Handles both full ISO ("2026-05-28T14:30:00") and date-only ("2026-05-28")
+        // Accepts both full ISO ("2026-05-28T14:30:00") and date-only ("2026-05-28")
         date: DateTime.parse(j['date'] as String),
         exercise: j['exercise'] as String,
         category: j['category'] as String,
@@ -57,8 +70,7 @@ class WorkoutSet {
         comment: j['comment'] as String? ?? '',
       );
 
-  // ── FitNotes-compatible CSV row ────────────────────────────────────────────
-
+  /// Returns a FitNotes-compatible CSV row for this set.
   String toCsvRow() {
     final d = _fmtDate(date);
     final w = weight > 0 ? weight.toStringAsFixed(1) : '';
@@ -73,20 +85,16 @@ class WorkoutSet {
     return '$d,$exercise,$category,$w,$wUnit,$r,$dist,$dUnit,$dur,"$c"';
   }
 
-  // ── Human-readable one-liner for UI display ───────────────────────────────
-
+  /// Human-readable summary shown in the log and history UI.
   String get displayText {
-    // Time-based (Dead Hang, Sauna, etc.)
     if (duration != null && weight == 0 && reps == 0 && distance == null) {
       return duration!;
     }
-    // Cardio (distance + optional pace)
     if (distance != null && distance! > 0) {
       final unit = distanceUnit ?? 'mi';
       if (duration != null) return '${distance!.toStringAsFixed(2)} $unit @ $duration';
       return '${distance!.toStringAsFixed(2)} $unit';
     }
-    // Strength
     return '${weight.toStringAsFixed(1)} lbs × $reps';
   }
 

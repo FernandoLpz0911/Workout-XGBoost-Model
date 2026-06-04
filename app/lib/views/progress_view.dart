@@ -6,6 +6,8 @@ import '../services/local_recommendation_engine.dart';
 import '../models/workout_set.dart';
 import '../viewmodels/log_viewmodel.dart';
 
+/// Progress charts for strength exercises — estimated 1RM, max weight, or
+/// total volume over a selectable time range.
 class ProgressView extends StatefulWidget {
   const ProgressView({super.key});
 

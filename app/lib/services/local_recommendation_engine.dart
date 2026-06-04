@@ -2,12 +2,18 @@ import 'dart:math';
 import '../models/recommendation_models.dart';
 import '../models/workout_set.dart';
 
-/// Fully offline recommendation engine — mirrors the Python pipeline logic in Dart.
+/// Fully offline recommendation engine — mirrors the Python/XGBoost pipeline
+/// logic in Dart so the app never needs a network connection.
 ///
-/// No network calls. All computation is derived from the user's local history.
+/// All computation is derived from the user's local [WorkoutSet] history.
+/// Supports [TrainingMode.hypertrophy] and [TrainingMode.strength] via
+/// different rep ranges, weight increments, and graduation thresholds.
 class LocalRecommendationEngine {
-  // ── 1RM formulas (same as pipeline.py) ───────────────────────────────────
-
+  /// Estimates 1-rep max using the best formula for the given rep count.
+  ///
+  /// - Brzycki  for 1–6 reps (accurate at very high intensities)
+  /// - Epley    for 7–11 reps (general-purpose)
+  /// - Mayhew   for 12+ reps (better at higher rep ranges)
   static double calcOneRM(double weight, int reps) {
     if (reps <= 0 || weight <= 0) return 0;
     if (reps <= 6) return weight / (1.0278 - 0.0278 * reps);    // Brzycki
@@ -18,8 +24,8 @@ class LocalRecommendationEngine {
   static double _workingWeight(double oneRM, int reps) =>
       oneRM / (1 + 0.0333 * reps);
 
-  // ── Linear slope (for 1RM momentum over last N sessions) ─────────────────
-
+  /// Least-squares slope across [ys] — used to detect rising/falling 1RM
+  /// momentum over the last three sessions.
   static double _slope(List<double> ys) {
     if (ys.length < 2) return 0.0;
     final n = ys.length.toDouble();
@@ -33,8 +39,8 @@ class LocalRecommendationEngine {
     return den == 0 ? 0.0 : num / den;
   }
 
-  // ── Comment signal detection (same patterns as pipeline.py) ──────────────
-  // Using Pattern + String.contains() avoids the RegExp deprecation lint.
+  // RegExp patterns mirror the ones used in pipeline.py so signal detection
+  // stays consistent between the offline engine and cloud model.
 
   static final Pattern _formIssueRe = RegExp(
     r"did it wrong|wrong|unsure|too heavy|failed|couldn't|sloppy|"
@@ -56,8 +62,6 @@ class LocalRecommendationEngine {
   static bool _isDropSet(String c) => c.contains(_dropSetRe);
   static bool _isWarmup(String c) => c.contains(_warmupRe);
 
-  // ── Session grouping ──────────────────────────────────────────────────────
-
   static List<List<WorkoutSet>> _groupBySessions(List<WorkoutSet> sets) {
     final map = <String, List<WorkoutSet>>{};
     for (final s in sets) {
@@ -70,14 +74,27 @@ class LocalRecommendationEngine {
     return sortedKeys.map((k) => map[k]!).toList();
   }
 
-  // ── Main recommendation ───────────────────────────────────────────────────
-
+  /// Returns a [Recommendation] for [exercise] given the user's full history.
+  ///
+  /// The [mode] parameter selects between hypertrophy and strength progressions.
+  /// Drop sets and warm-up sets are excluded before any computation.
   static Recommendation recommend({
     required String exercise,
     required String category,
     required List<WorkoutSet> allHistory,
+    TrainingMode mode = TrainingMode.hypertrophy,
   }) {
-    // Filter to this exercise, excluding drop sets and warm-up sets
+    // Hypertrophy: moderate weight, 8–12 rep range, +2.5 lb jumps
+    // Strength:    heavy weight,    3–6 rep range,  +5.0 lb jumps
+    final bool isStrength = mode == TrainingMode.strength;
+    final int defaultReps = isStrength ? 5 : 10;
+    final int graduationReps = isStrength ? 6 : 12;
+    final int volumeTargetReps = isStrength ? 6 : 12;
+    final int stabilizeReps = isStrength ? 4 : 10;
+    final int stabilizeThreshold = isStrength ? 3 : 8;
+    final double weightIncrement = isStrength ? 5.0 : 2.5;
+    final String modeLabel = isStrength ? 'STRENGTH' : 'HYPERTROPHY';
+
     final raw = allHistory
         .where((s) => s.exercise == exercise)
         .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
@@ -85,8 +102,8 @@ class LocalRecommendationEngine {
       ..sort((a, b) => a.date.compareTo(b.date));
 
     if (raw.isEmpty) {
-      return const Recommendation(
-        targetReps: 8,
+      return Recommendation(
+        targetReps: defaultReps,
         targetWeight: 0.0,
         status: 'NEW EXERCISE: No history — log your first sets',
         predicted1RM: 0,
@@ -98,7 +115,8 @@ class LocalRecommendationEngine {
 
     final sessions = _groupBySessions(raw);
 
-    // Remove weight-based warm-ups: sets < 60% of session max weight
+    // Exclude intra-session warm-up weights: any set below 60 % of that
+    // session's top weight is likely a warm-up that would inflate rep counts.
     final workingSessions = sessions.map((sess) {
       final maxW = sess.map((s) => s.weight).reduce(max);
       return sess
@@ -107,8 +125,8 @@ class LocalRecommendationEngine {
     }).where((sess) => sess.isNotEmpty).toList();
 
     if (workingSessions.isEmpty) {
-      return const Recommendation(
-        targetReps: 8,
+      return Recommendation(
+        targetReps: defaultReps,
         targetWeight: 45.0,
         status: 'BASELINE: Insufficient quality sets found',
         predicted1RM: 0,
@@ -127,7 +145,8 @@ class LocalRecommendationEngine {
     final hadFormIssue = lastSess.any((s) => _isFormIssue(s.comment));
     final hadFatigue = lastSess.any((s) => _isFatigue(s.comment));
 
-    // 1RM momentum: linear slope over last 3 sessions
+    // Linear slope over the last 3 sessions — positive means the 1RM is
+    // climbing, negative means it's declining (possible overtraining signal).
     final recentSessions = workingSessions.length >= 3
         ? workingSessions.sublist(workingSessions.length - 3)
         : workingSessions;
@@ -137,7 +156,8 @@ class LocalRecommendationEngine {
         .toList();
     final momentum = _slope(recent1RMs);
 
-    // Rep consistency: did reps collapse across sets last session?
+    // Rep consistency: a ratio < 0.5 means reps collapsed across sets
+    // (e.g. 10 → 7 → 3), suggesting the weight was too heavy to sustain.
     final repVals = lastSess.map((s) => s.reps.toDouble()).toList();
     final repConsistency = repVals.length > 1
         ? (repVals.reduce(min) /
@@ -145,30 +165,31 @@ class LocalRecommendationEngine {
             .clamp(0.0, 1.0)
         : 1.0;
 
-    // ── Progression decision ──────────────────────────────────────────────
-
     double targetWeight;
     int targetReps;
     String baseStatus;
 
     if (hadFormIssue) {
       targetWeight = lastMaxW;
-      targetReps = 8;
+      targetReps = defaultReps;
       baseStatus = 'FORM FOCUS: Repeat weight to nail technique';
-    } else if (lastAvgReps >= 10) {
-      targetWeight = lastMaxW + 2.5;
-      targetReps = 8;
-      baseStatus = 'PROGRESSION: Weight Increased';
-    } else if (lastAvgReps < 6) {
+    } else if (lastAvgReps >= graduationReps) {
+      targetWeight = lastMaxW + weightIncrement;
+      targetReps = defaultReps;
+      baseStatus = '$modeLabel PROGRESSION: Weight Increased';
+    } else if (lastAvgReps < stabilizeThreshold) {
       targetWeight = lastMaxW;
-      targetReps = 8;
-      baseStatus = 'STABILIZATION: Build rep count first';
+      targetReps = stabilizeReps;
+      baseStatus = '$modeLabel STABILIZATION: Build rep count first';
     } else {
       targetWeight = lastMaxW;
-      targetReps = 10;
-      baseStatus = 'VOLUME: Push for graduation threshold';
+      targetReps = volumeTargetReps;
+      baseStatus = '$modeLabel VOLUME: Push for $volumeTargetReps reps';
     }
 
+    // Category-specific safety floors: larger muscle groups (Legs, Chest, Back)
+    // need a higher capacity threshold before adding weight because the load is
+    // heavier and injury risk is greater than for smaller groups (Arms).
     const thresholds = <String, double>{
       'Legs': 0.95,
       'Chest': 0.95,
@@ -181,25 +202,22 @@ class LocalRecommendationEngine {
     String status;
 
     if (lastMaxW == 0) {
-      // Bodyweight exercise — progress via reps
-      targetReps = (lastAvgReps >= 10) ? 12 : 8;
+      targetReps = (lastAvgReps >= graduationReps) ? volumeTargetReps + 3 : defaultReps;
       status = 'BODYWEIGHT: Add reps to progress';
     } else if (momentum < -2.0 && last1RM < required1RM * threshold) {
-      // Declining trend + ambitious target → pull back
+      // Declining trend combined with an ambitious target — pull back weight
+      // to stay within the safety threshold rather than risk regression/injury.
       var adjusted = (_workingWeight(last1RM, targetReps) / 2.5).round() * 2.5;
       if (adjusted <= 0) adjusted = lastMaxW;
       targetWeight = adjusted.toDouble();
       status = 'AI OVERRIDE: Declining trend — weight adjusted for safety';
     } else if (repConsistency < 0.5 && !hadFormIssue) {
-      // Reps collapsed (e.g. 10→7→3) — stabilise before progressing
       targetWeight = lastMaxW;
-      targetReps = 8;
+      targetReps = defaultReps;
       status = 'STABILIZATION: Rep drop detected — build consistency';
     } else {
       status = baseStatus;
     }
-
-    // ── Notes insight ─────────────────────────────────────────────────────
 
     final insights = <String>[];
     if (hadFormIssue) {

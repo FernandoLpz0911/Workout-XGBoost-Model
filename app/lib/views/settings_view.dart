@@ -4,6 +4,8 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import '../viewmodels/log_viewmodel.dart';
 
+/// Settings screen: local data stats, FitNotes CSV import, optional cloud
+/// model retraining, and data deletion.
 class SettingsView extends StatelessWidget {
   const SettingsView({super.key});
 
@@ -207,8 +209,6 @@ class SettingsView extends StatelessWidget {
     );
   }
 }
-
-// ── Shared UI helpers ─────────────────────────────────────────────────────────
 
 class _SectionHeader extends StatelessWidget {
   final String title;
