@@ -1,6 +1,6 @@
 import 'dart:math';
-import 'package:exercise_analyzer/models/recommendation_models.dart';
-import 'package:exercise_analyzer/models/workout_set.dart';
+import 'package:repiq/models/recommendation_models.dart';
+import 'package:repiq/models/workout_set.dart';
 
 /// Fully offline recommendation engine — mirrors the Python/XGBoost pipeline
 /// logic in Dart so the app never needs a network connection.

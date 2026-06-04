@@ -12,17 +12,31 @@ class ApiService {
 
   /// Uploads [csvBytes] to the cloud `/train` endpoint to retrain the XGBoost
   /// model with the latest local data.
-  Future<void> trainFromCsvBytes(Uint8List csvBytes) async {
+  ///
+  /// [authToken] is the Firebase ID token obtained from [AuthViewModel.getIdToken].
+  /// The backend validates this token and verifies the user's subscription before
+  /// allowing retraining.
+  Future<void> trainFromCsvBytes(Uint8List csvBytes,
+      {String? authToken}) async {
     final request =
         http.MultipartRequest('POST', Uri.parse('$baseUrl/train'));
+    if (authToken != null) {
+      request.headers['Authorization'] = 'Bearer $authToken';
+    }
     request.files.add(http.MultipartFile.fromBytes(
       'file',
       csvBytes,
       filename: 'workout_data.csv',
     ));
-    final streamed = await request.send();
+    final streamed = await request.send().timeout(const Duration(seconds: 30));
     if (streamed.statusCode != 200) {
       final body = await streamed.stream.bytesToString();
+      if (streamed.statusCode == 401) {
+        throw Exception('Authentication required. Please sign in.');
+      }
+      if (streamed.statusCode == 403) {
+        throw Exception('Premium subscription required to retrain the model.');
+      }
       throw Exception('Training failed: $body');
     }
   }

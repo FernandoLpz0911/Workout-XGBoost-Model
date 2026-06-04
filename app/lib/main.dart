@@ -1,18 +1,24 @@
+import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'services/rest_timer.dart';
-import 'viewmodels/log_viewmodel.dart';
-import 'views/log_view.dart';
-import 'views/history_view.dart';
-import 'views/progress_view.dart';
-import 'views/settings_view.dart';
+import 'package:repiq/firebase_options.dart';
+import 'package:repiq/services/rest_timer.dart';
+import 'package:repiq/viewmodels/auth_viewmodel.dart';
+import 'package:repiq/viewmodels/log_viewmodel.dart';
+import 'package:repiq/viewmodels/subscription_viewmodel.dart';
+import 'package:repiq/views/history_view.dart';
+import 'package:repiq/views/log_view.dart';
+import 'package:repiq/views/progress_view.dart';
+import 'package:repiq/views/settings_view.dart';
+import 'package:repiq/views/sign_in_view.dart';
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   runApp(const WorkoutApp());
 }
 
-/// Root widget. Provides [LogViewModel] and [RestTimer] to the widget tree and
-/// applies the app-wide dark theme.
+/// Root widget. Initialises all providers and applies the app-wide dark theme.
 class WorkoutApp extends StatelessWidget {
   const WorkoutApp({super.key});
 
@@ -20,11 +26,13 @@ class WorkoutApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider(create: (_) => AuthViewModel()),
         ChangeNotifierProvider(create: (_) => LogViewModel()),
         ChangeNotifierProvider(create: (_) => RestTimer()),
+        ChangeNotifierProvider(create: (_) => SubscriptionViewModel()),
       ],
       child: MaterialApp(
-        title: 'AI Workout',
+        title: 'RepIQ',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           brightness: Brightness.dark,
@@ -37,10 +45,45 @@ class WorkoutApp extends StatelessWidget {
           cardColor: const Color(0xFF262730),
           useMaterial3: true,
         ),
-        home: const _AppShell(),
+        home: const _AuthGate(),
       ),
     );
   }
+}
+
+/// Shows [SignInView] until the user is authenticated, then boots the main app
+/// and initialises the subscription state.
+class _AuthGate extends StatelessWidget {
+  const _AuthGate();
+
+  @override
+  Widget build(BuildContext context) {
+    final auth = context.watch<AuthViewModel>();
+    if (!auth.isSignedIn) return const SignInView();
+    return const _AppRoot();
+  }
+}
+
+/// Initialises the subscription check once on first build, then shows the shell.
+class _AppRoot extends StatefulWidget {
+  const _AppRoot();
+
+  @override
+  State<_AppRoot> createState() => _AppRootState();
+}
+
+class _AppRootState extends State<_AppRoot> {
+  @override
+  void initState() {
+    super.initState();
+    // Runs after the first frame so the context has all providers available.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      context.read<SubscriptionViewModel>().initialize();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) => const _AppShell();
 }
 
 class _AppShell extends StatefulWidget {

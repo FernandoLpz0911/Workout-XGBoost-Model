@@ -1,0 +1,62 @@
+{
+  "project_info": {
+    "project_number": "231131893492",
+    "project_id": "workoutml",
+    "storage_bucket": "workoutml.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:231131893492:android:6bd7869351952dbd4258a1",
+        "android_client_info": {
+          "package_name": "com.fernandolpzdev.workoutml"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "231131893492-96ao51da7dc6d5qamdv4iqkrp1uhs5k2.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fernandolpzdev.workoutml",
+            "certificate_hash": "6e37b0c36a7e0fd55d33dd01b5e2931848f4bfdc"
+          }
+        },
+        {
+          "client_id": "231131893492-uf2t8o4rge270ifbavoa5h3rdkto9p19.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.fernandolpzdev.workoutml",
+            "certificate_hash": "7ed5666e5aff05c9c6502c6de5f09c6f616ab3db"
+          }
+        },
+        {
+          "client_id": "231131893492-v69cjafqrr5ck4499ph2bllpmbf5ksdm.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBAUYmSa77TM7bqvRmm3jWs2RCjgsjMGT0"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "231131893492-v69cjafqrr5ck4499ph2bllpmbf5ksdm.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "231131893492-vofde8h5tebekl4318hv17eebcun12sm.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.app"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
