@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../models/workout_set.dart';
 import '../viewmodels/log_viewmodel.dart';
 
+/// Displays the full workout history grouped by date, then by exercise.
 class HistoryView extends StatelessWidget {
   const HistoryView({super.key});
 
@@ -54,7 +55,6 @@ class _DayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Group by exercise within this day
     final byExercise = <String, List<WorkoutSet>>{};
     for (final s in sets) {
       byExercise.putIfAbsent(s.exercise, () => []).add(s);

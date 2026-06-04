@@ -5,8 +5,18 @@ import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
 import 'package:vibration/vibration.dart';
 
+/// Countdown rest timer with audio and vibration feedback.
+///
+/// Exposes [start], [stop], and [adjustSeconds] for UI control. Settings
+/// ([soundEnabled], [vibrationEnabled], [autoStartEnabled], [volume]) are
+/// toggled directly via setters and survive the widget lifecycle via
+/// [ChangeNotifier].
+///
+/// The alert sound is synthesized at startup — no audio asset file is needed.
 class RestTimer extends ChangeNotifier {
+  /// Total duration of one rest interval in seconds.
   int totalSeconds = 120;
+
   int _remaining = 0;
   Timer? _timer;
 
@@ -16,15 +26,25 @@ class RestTimer extends ChangeNotifier {
   double _volume = 1.0;
 
   final _player = AudioPlayer();
+
+  /// In-memory WAV bytes built once at construction — avoids bundling an asset.
   late final Uint8List _beepWav = _buildBeepWav();
 
   bool get isRunning => _timer?.isActive ?? false;
+
+  /// True when the timer is not running and has not been started yet (or was stopped).
   bool get isIdle => !isRunning && _remaining == 0;
+
+  /// Seconds remaining in the current countdown.
   int get remaining => _remaining;
+
+  /// Fraction of [totalSeconds] remaining, used to drive a progress indicator.
   double get progress => totalSeconds > 0 ? _remaining / totalSeconds : 0.0;
 
   bool get soundEnabled => _soundEnabled;
   bool get vibrationEnabled => _vibrationEnabled;
+
+  /// When true, the timer starts automatically after each logged set.
   bool get autoStartEnabled => _autoStartEnabled;
   double get volume => _volume;
 
@@ -49,12 +69,14 @@ class RestTimer extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Current countdown formatted as `M:SS`.
   String get displayTime {
     final m = _remaining ~/ 60;
     final s = _remaining % 60;
     return '$m:${s.toString().padLeft(2, '0')}';
   }
 
+  /// Starts (or restarts) the countdown from [totalSeconds].
   void start() {
     _timer?.cancel();
     _remaining = totalSeconds;
@@ -72,6 +94,7 @@ class RestTimer extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Cancels the countdown and resets [remaining] to zero.
   void stop() {
     _timer?.cancel();
     _timer = null;
@@ -79,6 +102,8 @@ class RestTimer extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Adds [delta] seconds to [totalSeconds], clamped to 15–600 s.
+  /// Also adjusts [remaining] if the timer is currently running.
   void adjustSeconds(int delta) {
     totalSeconds = (totalSeconds + delta).clamp(15, 600);
     if (isRunning) {
@@ -115,14 +140,17 @@ class RestTimer extends ChangeNotifier {
   }
 }
 
-// Generates a triple-beep WAV entirely in memory — no asset file needed.
+/// Synthesizes a triple-beep WAV entirely in memory — no asset file needed.
+///
+/// Three 150 ms beeps at A5 (880 Hz) separated by 100 ms silence, with a
+/// 10 ms fade-in/out envelope on each beep to prevent audio clicks.
 Uint8List _buildBeepWav() {
   const sampleRate = 44100;
   const hz = 880.0; // A5 — classic timer tone
   const amplitude = 0.65;
   const beepMs = 150;
   const silenceMs = 100;
-  const totalMs = beepMs * 3 + silenceMs * 2; // 650 ms
+  const totalMs = beepMs * 3 + silenceMs * 2;
 
   final numSamples = sampleRate * totalMs ~/ 1000;
   final beepSamples = sampleRate * beepMs ~/ 1000;
@@ -131,7 +159,7 @@ Uint8List _buildBeepWav() {
   final pcm = Int16List(numSamples);
 
   void fillBeep(int start, int count) {
-    const fadeLen = 441; // 10 ms fade-in/out to avoid clicks
+    const fadeLen = 441; // 10 ms fade-in/out to avoid audio clicks
     for (int i = 0; i < count && start + i < numSamples; i++) {
       final t = i / sampleRate;
       final env = i < fadeLen

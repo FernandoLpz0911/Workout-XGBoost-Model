@@ -5,6 +5,10 @@ import '../models/workout_set.dart';
 import '../services/rest_timer.dart';
 import '../viewmodels/log_viewmodel.dart';
 
+export '../viewmodels/log_viewmodel.dart' show TrainingMode;
+
+/// Main workout logging screen. Shows today's session exercises and lets the
+/// user add exercises, log sets, edit or delete sets, and start the rest timer.
 class LogView extends StatelessWidget {
   const LogView({super.key});
 
@@ -129,6 +133,13 @@ class _ExerciseCard extends StatelessWidget {
                 ),
               ],
             ),
+            if (exerciseTypeOf(ex.category) == ExerciseType.strength) ...[
+              const SizedBox(height: 10),
+              _TrainingModeToggle(
+                mode: ex.trainingMode,
+                onChanged: (mode) => vm.setTrainingMode(index, mode),
+              ),
+            ],
             const SizedBox(height: 12),
             _RecBanner(ex: ex),
             if (ex.sets.isNotEmpty) ...[
@@ -138,6 +149,7 @@ class _ExerciseCard extends StatelessWidget {
                     (e) => _SetRow(
                       setNum: e.key + 1,
                       set: e.value,
+                      onEdit: () => _showEditSet(context, e.key),
                       onDelete: () => vm.removeSet(index, e.key),
                     ),
                   ),
@@ -185,6 +197,20 @@ class _ExerciseCard extends StatelessWidget {
                 style: TextStyle(color: Colors.redAccent)),
           ),
         ],
+      ),
+    );
+  }
+
+  void _showEditSet(BuildContext context, int setIndex) {
+    final ex = vm.session[index];
+    showDialog<bool>(
+      context: context,
+      builder: (_) => _LogSetDialog(
+        exercise: ex.exercise,
+        category: ex.category,
+        recommendation: ex.recommendation,
+        existingSet: ex.sets[setIndex],
+        onSave: (updated) => vm.updateSet(index, setIndex, updated),
       ),
     );
   }
@@ -308,9 +334,14 @@ class _InfoChip extends StatelessWidget {
 class _SetRow extends StatelessWidget {
   final int setNum;
   final WorkoutSet set;
+  final VoidCallback onEdit;
   final VoidCallback onDelete;
-  const _SetRow(
-      {required this.setNum, required this.set, required this.onDelete});
+  const _SetRow({
+    required this.setNum,
+    required this.set,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -334,6 +365,15 @@ class _SetRow extends StatelessWidget {
             ),
           ] else
             const Spacer(),
+          IconButton(
+            icon: const Icon(Icons.edit_outlined,
+                size: 16, color: Colors.grey),
+            onPressed: onEdit,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            tooltip: 'Edit',
+          ),
+          const SizedBox(width: 8),
           IconButton(
             icon: const Icon(Icons.delete_outline,
                 size: 18, color: Colors.grey),
@@ -504,12 +544,14 @@ class _LogSetDialog extends StatefulWidget {
   final String exercise;
   final String category;
   final Recommendation? recommendation;
+  final WorkoutSet? existingSet;
   final void Function(WorkoutSet) onSave;
 
   const _LogSetDialog({
     required this.exercise,
     required this.category,
     required this.recommendation,
+    this.existingSet,
     required this.onSave,
   });
 
@@ -535,9 +577,19 @@ class _LogSetDialogState extends State<_LogSetDialog> {
   @override
   void initState() {
     super.initState();
-    final rec = widget.recommendation;
-    _weight = rec?.targetWeight ?? 0.0;
-    _reps = rec?.targetReps ?? 8;
+    final existing = widget.existingSet;
+    if (existing != null) {
+      _weight = existing.weight;
+      _reps = existing.reps;
+      _distCtrl.text = existing.distance != null ? existing.distance!.toStringAsFixed(2) : '';
+      _distUnit = existing.distanceUnit ?? 'mi';
+      _durCtrl.text = existing.duration ?? '';
+      _noteCtrl.text = existing.comment;
+    } else {
+      final rec = widget.recommendation;
+      _weight = rec?.targetWeight ?? 0.0;
+      _reps = rec?.targetReps ?? 8;
+    }
   }
 
   @override
@@ -563,11 +615,13 @@ class _LogSetDialogState extends State<_LogSetDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(_type == ExerciseType.cardio
-          ? 'Log Lap'
-          : _type == ExerciseType.passive
-              ? 'Log Session'
-              : 'Log Set'),
+      title: Text(widget.existingSet != null
+          ? 'Edit Set'
+          : _type == ExerciseType.cardio
+              ? 'Log Lap'
+              : _type == ExerciseType.passive
+                  ? 'Log Session'
+                  : 'Log Set'),
       contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       content: SingleChildScrollView(
         child: Column(
@@ -716,11 +770,12 @@ class _LogSetDialogState extends State<_LogSetDialog> {
   }
 
   void _save() {
+    final date = widget.existingSet?.date ?? DateTime.now();
     final WorkoutSet set;
     switch (_type) {
       case ExerciseType.strength:
         set = WorkoutSet(
-          date: DateTime.now(),
+          date: date,
           exercise: widget.exercise,
           category: widget.category,
           weight: _weight,
@@ -729,7 +784,7 @@ class _LogSetDialogState extends State<_LogSetDialog> {
         );
       case ExerciseType.cardio:
         set = WorkoutSet(
-          date: DateTime.now(),
+          date: date,
           exercise: widget.exercise,
           category: widget.category,
           distance: double.parse(_distCtrl.text),
@@ -739,7 +794,7 @@ class _LogSetDialogState extends State<_LogSetDialog> {
         );
       case ExerciseType.passive:
         set = WorkoutSet(
-          date: DateTime.now(),
+          date: date,
           exercise: widget.exercise,
           category: widget.category,
           duration: _durCtrl.text.trim(),
@@ -816,6 +871,36 @@ class _StepBtn extends StatelessWidget {
           padding: const EdgeInsets.all(14),
           child: Icon(icon, size: 22),
         ),
+      ),
+    );
+  }
+}
+
+class _TrainingModeToggle extends StatelessWidget {
+  final TrainingMode mode;
+  final void Function(TrainingMode) onChanged;
+  const _TrainingModeToggle({required this.mode, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return SegmentedButton<TrainingMode>(
+      segments: const [
+        ButtonSegment(
+          value: TrainingMode.hypertrophy,
+          label: Text('Hypertrophy'),
+          icon: Icon(Icons.show_chart, size: 15),
+        ),
+        ButtonSegment(
+          value: TrainingMode.strength,
+          label: Text('Strength'),
+          icon: Icon(Icons.bolt, size: 15),
+        ),
+      ],
+      selected: {mode},
+      onSelectionChanged: (s) => onChanged(s.first),
+      style: const ButtonStyle(
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        visualDensity: VisualDensity(horizontal: -2, vertical: -2),
       ),
     );
   }

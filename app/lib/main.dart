@@ -11,6 +11,8 @@ void main() {
   runApp(const WorkoutApp());
 }
 
+/// Root widget. Provides [LogViewModel] and [RestTimer] to the widget tree and
+/// applies the app-wide dark theme.
 class WorkoutApp extends StatelessWidget {
   const WorkoutApp({super.key});
 
@@ -104,6 +106,7 @@ class _AppShellState extends State<_AppShell> {
   }
 }
 
+/// AppBar action that shows the live countdown and opens the [_TimerSheet].
 class _TimerAction extends StatelessWidget {
   const _TimerAction();
 

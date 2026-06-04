@@ -5,42 +5,83 @@ import '../services/api_service.dart';
 import '../services/local_recommendation_engine.dart';
 import '../services/local_storage_service.dart';
 
+export '../models/recommendation_models.dart' show TrainingMode;
+
+/// Broad category of an exercise, used to route UI and recommendation logic.
 enum ExerciseType { strength, cardio, passive }
 
+/// Maps a FitNotes category string to an [ExerciseType].
 ExerciseType exerciseTypeOf(String category) {
   if (category == 'Cardio') return ExerciseType.cardio;
   if (category == 'Passive') return ExerciseType.passive;
   return ExerciseType.strength;
 }
 
+/// One exercise added to the current session, along with its logged sets and
+/// the most recent recommendation.
 class SessionExercise {
   final String exercise;
   final String category;
+
+  /// Whether this exercise is being trained for hypertrophy or absolute strength.
+  /// Persists across sessions via [LogViewModel].
+  TrainingMode trainingMode;
+
+  /// The AI-generated recommendation for this session. Null until computed,
+  /// or for non-strength exercises.
   Recommendation? recommendation;
+
+  /// Non-null when recommendation computation failed.
   String? recError;
+
+  /// Human-readable summary of the last cardio or passive session, shown
+  /// instead of a strength recommendation for those exercise types.
   String? lastSessionSummary;
+
   final List<WorkoutSet> sets = [];
 
-  SessionExercise({required this.exercise, required this.category});
+  SessionExercise({
+    required this.exercise,
+    required this.category,
+    this.trainingMode = TrainingMode.hypertrophy,
+  });
 }
 
+/// Central state manager for the app (Provider / [ChangeNotifier]).
+///
+/// Owns:
+/// - The full [history] of logged sets (loaded from [LocalStorageService])
+/// - The current workout [session] (today's exercises and their logged sets)
+/// - The [exerciseDict] used to populate category/exercise pickers
+/// - Per-exercise [TrainingMode] preferences
+/// - Loading and error state for import and cloud training operations
 class LogViewModel extends ChangeNotifier {
   final _api = ApiService();
   final _storage = LocalStorageService();
 
+  /// Category → sorted exercise name list, built from history + presets.
   Map<String, List<String>> exerciseDict = {};
   bool isDictLoading = true;
 
+  /// Exercises added to today's session, in the order they were added.
   final List<SessionExercise> session = [];
 
+  /// Full workout history, sorted newest-first.
   List<WorkoutSet> history = [];
   bool isHistoryLoading = false;
 
   bool isTraining = false;
   bool isImporting = false;
+
+  /// Result message from the last import or cloud training action.
   String? lastActionMessage;
+
+  /// Total number of sets currently stored on-device.
   int localSetCount = 0;
 
+  Map<String, TrainingMode> _trainingModes = {};
+
+  /// Built-in exercise list shown even before the user has any history.
   static const _presetExercises = <String, List<String>>{
     'Back': [
       'Barbell Row', 'Deadlift', 'Face Pull', 'Hyperextension',
@@ -88,24 +129,40 @@ class LogViewModel extends ChangeNotifier {
     ],
   };
 
-  // All categories with presets are always shown, even with no history.
   static final _alwaysCategories = _presetExercises.keys.toSet();
 
   LogViewModel() {
     _initialize();
   }
 
+  /// Returns the saved [TrainingMode] for [exercise], defaulting to hypertrophy.
+  TrainingMode trainingModeFor(String exercise) =>
+      _trainingModes[exercise] ?? TrainingMode.hypertrophy;
+
+  /// Updates the training mode for the exercise at [index], persists it, and
+  /// immediately recomputes the recommendation.
+  void setTrainingMode(int index, TrainingMode mode) {
+    session[index].trainingMode = mode;
+    _trainingModes[session[index].exercise] = mode;
+    _applyRec(session[index]);
+    _saveTrainingModes();
+    notifyListeners();
+  }
+
+  /// All categories, combining history and presets, sorted alphabetically.
   List<String> get allCategories {
     final cats = <String>{...exerciseDict.keys, ..._alwaysCategories};
     return cats.toList()..sort();
   }
 
+  /// Sorted exercise names for [category], merging history and presets.
   List<String> exercisesFor(String category) {
     final fromHistory = exerciseDict[category] ?? <String>[];
     final presets = _presetExercises[category] ?? <String>[];
     return <String>{...fromHistory, ...presets}.toList()..sort();
   }
 
+  /// History grouped by date string (`"YYYY-MM-DD"`), sorted newest-first.
   Map<String, List<WorkoutSet>> get historyByDate {
     final grouped = <String, List<WorkoutSet>>{};
     for (final s in history) {
@@ -118,10 +175,24 @@ class LogViewModel extends ChangeNotifier {
     isDictLoading = true;
     notifyListeners();
     await _loadHistory();
+    await _loadTrainingModes();
     _rebuildDict();
     _loadTodaySession();
     isDictLoading = false;
     notifyListeners();
+  }
+
+  Future<void> _loadTrainingModes() async {
+    final raw = await _storage.loadTrainingModes();
+    _trainingModes = raw.map(
+      (k, v) => MapEntry(k, v == 'strength' ? TrainingMode.strength : TrainingMode.hypertrophy),
+    );
+  }
+
+  void _saveTrainingModes() {
+    _storage.saveTrainingModes(
+      _trainingModes.map((k, v) => MapEntry(k, v.name)),
+    );
   }
 
   void _rebuildDict() {
@@ -134,6 +205,8 @@ class LogViewModel extends ChangeNotifier {
     );
   }
 
+  /// Restores any exercises already logged today so a mid-session app restart
+  /// doesn't lose the current session.
   void _loadTodaySession() {
     session.clear();
     final today = _fmtDate(DateTime.now());
@@ -146,7 +219,11 @@ class LogViewModel extends ChangeNotifier {
       var idx = session.indexWhere(
           (e) => e.exercise == s.exercise && e.category == s.category);
       if (idx == -1) {
-        final ex = SessionExercise(exercise: s.exercise, category: s.category);
+        final ex = SessionExercise(
+          exercise: s.exercise,
+          category: s.category,
+          trainingMode: trainingModeFor(s.exercise),
+        );
         _applyRec(ex);
         session.add(ex);
         idx = session.length - 1;
@@ -162,6 +239,7 @@ class LogViewModel extends ChangeNotifier {
           exercise: ex.exercise,
           category: ex.category,
           allHistory: history,
+          mode: ex.trainingMode,
         );
       } catch (_) {
         ex.recError = 'Could not compute recommendation.';
@@ -190,17 +268,24 @@ class LogViewModel extends ChangeNotifier {
     return dur != null ? 'Last session: $dur' : '';
   }
 
+  /// Adds [exercise] to the current session if it isn't already present,
+  /// and immediately computes its recommendation.
   void addExercise(String category, String exercise) {
     if (session.any(
         (e) => e.exercise == exercise && e.category == category)) {
       return;
     }
-    final ex = SessionExercise(exercise: exercise, category: category);
+    final ex = SessionExercise(
+      exercise: exercise,
+      category: category,
+      trainingMode: trainingModeFor(exercise),
+    );
     _applyRec(ex);
     session.add(ex);
     notifyListeners();
   }
 
+  /// Appends [set] to the session and persists it immediately.
   void logSet(int exerciseIndex, WorkoutSet set) {
     session[exerciseIndex].sets.add(set);
     history.insert(0, set);
@@ -209,6 +294,7 @@ class LogViewModel extends ChangeNotifier {
     _storage.appendSets([set]);
   }
 
+  /// Removes the set at [setIndex] from the session and from storage.
   void removeSet(int exerciseIndex, int setIndex) {
     final set = session[exerciseIndex].sets.removeAt(setIndex);
     localSetCount--;
@@ -216,6 +302,30 @@ class LogViewModel extends ChangeNotifier {
     _deleteSetFromStorage(set);
   }
 
+  /// Replaces the set at [setIndex] with [updated], preserving its original
+  /// timestamp, and recomputes the recommendation with the new data.
+  void updateSet(int exerciseIndex, int setIndex, WorkoutSet updated) {
+    final old = session[exerciseIndex].sets[setIndex];
+    session[exerciseIndex].sets[setIndex] = updated;
+    final hi = history.indexWhere((s) =>
+        s.date.millisecondsSinceEpoch == old.date.millisecondsSinceEpoch &&
+        s.exercise == old.exercise);
+    if (hi != -1) history[hi] = updated;
+    _applyRec(session[exerciseIndex]);
+    notifyListeners();
+    _persistUpdate(old, updated);
+  }
+
+  Future<void> _persistUpdate(WorkoutSet old, WorkoutSet updated) async {
+    final all = await _storage.loadAll();
+    final i = all.indexWhere((s) =>
+        s.date.millisecondsSinceEpoch == old.date.millisecondsSinceEpoch &&
+        s.exercise == old.exercise);
+    if (i != -1) all[i] = updated;
+    await _storage.saveAll(all);
+  }
+
+  /// Removes an entire exercise and all its sets from the session and storage.
   void removeExercise(int index) {
     final sets = List<WorkoutSet>.from(session[index].sets);
     session.removeAt(index);
@@ -252,6 +362,7 @@ class LogViewModel extends ChangeNotifier {
     }
   }
 
+  /// Parses [csvText] as a FitNotes export and merges new rows into storage.
   Future<void> importCsvText(String csvText) async {
     isImporting = true;
     lastActionMessage = null;
@@ -270,6 +381,8 @@ class LogViewModel extends ChangeNotifier {
     }
   }
 
+  /// Exports local data as CSV and POSTs it to the cloud `/train` endpoint
+  /// to retrain the XGBoost model. The on-device engine is unaffected.
   Future<void> trainOnLocalData() async {
     isTraining = true;
     lastActionMessage = null;
@@ -288,6 +401,7 @@ class LogViewModel extends ChangeNotifier {
     }
   }
 
+  /// Permanently deletes all locally stored sets and clears the session.
   Future<void> clearLocalData() async {
     await _storage.clear();
     await _loadHistory();
