@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:exercise_analyzer/models/workout_set.dart';
+import 'package:repiq/models/workout_set.dart';
 
 void main() {
   group('WorkoutSet — toJson / fromJson round-trip', () {

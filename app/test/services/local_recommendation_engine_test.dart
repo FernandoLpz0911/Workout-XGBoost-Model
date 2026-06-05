@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:exercise_analyzer/models/recommendation_models.dart';
-import 'package:exercise_analyzer/models/workout_set.dart';
-import 'package:exercise_analyzer/services/local_recommendation_engine.dart';
+import 'package:repiq/models/recommendation_models.dart';
+import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/local_recommendation_engine.dart';
 
 /// Shorthand for building a test [WorkoutSet].
 WorkoutSet ws(

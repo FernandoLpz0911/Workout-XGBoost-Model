@@ -1,7 +1,7 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:exercise_analyzer/models/workout_set.dart';
-import 'package:exercise_analyzer/services/local_storage_service.dart';
+import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/local_storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();

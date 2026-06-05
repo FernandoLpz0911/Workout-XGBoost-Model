@@ -20,7 +20,7 @@ class SignInView extends StatelessWidget {
               const Icon(Icons.fitness_center, size: 72, color: Colors.redAccent),
               const SizedBox(height: 20),
               const Text(
-                'Workout ML',
+                'RepIQ',
                 style: TextStyle(
                   fontSize: 32,
                   fontWeight: FontWeight.bold,
