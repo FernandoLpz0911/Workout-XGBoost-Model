@@ -162,19 +162,28 @@ def _run_train(uid: str, csv_bytes: bytes) -> None:
             "status": "training",
             "startedAt": admin_firestore.SERVER_TIMESTAMP,
         })
+    except Exception:  # noqa: BLE001
+        pass  # never let a status write abort the training run
+    try:
         model, feature_cols, summary = run_pipeline(io.BytesIO(csv_bytes))
         _save_user_model(uid, model, feature_cols, summary)
-        status_ref.set({
-            "status": "complete",
-            "completedAt": admin_firestore.SERVER_TIMESTAMP,
-        })
+        try:
+            status_ref.set({
+                "status": "complete",
+                "completedAt": admin_firestore.SERVER_TIMESTAMP,
+            })
+        except Exception:  # noqa: BLE001
+            pass
         print(f"Training complete for {uid}")
     except Exception as exc:  # noqa: BLE001
-        status_ref.set({
-            "status": "failed",
-            "error": str(exc),
-            "failedAt": admin_firestore.SERVER_TIMESTAMP,
-        })
+        try:
+            status_ref.set({
+                "status": "failed",
+                "error": str(exc),
+                "failedAt": admin_firestore.SERVER_TIMESTAMP,
+            })
+        except Exception:  # noqa: BLE001
+            pass
         print(f"Training error for {uid}: {exc}")
 
 

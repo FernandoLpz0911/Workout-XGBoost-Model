@@ -84,7 +84,7 @@ class _RootGateState extends State<_RootGate> {
   @override
   void initState() {
     super.initState();
-    isOnboardingDone().then((v) => setState(() => _done = v));
+    isOnboardingDone().then((v) { if (mounted) setState(() => _done = v); });
   }
 
   @override
