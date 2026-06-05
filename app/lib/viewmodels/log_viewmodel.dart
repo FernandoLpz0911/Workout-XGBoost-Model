@@ -284,6 +284,10 @@ class LogViewModel extends ChangeNotifier {
   /// Restores any exercises already logged today so a mid-session app restart
   /// doesn't lose the current session.
   void _loadTodaySession() {
+    final savedCloudRecs = {
+      for (final e in session)
+        if (e.cloudRecommendation != null) e.exercise: e.cloudRecommendation!
+    };
     session.clear();
     final today = _fmtDate(DateTime.now());
     final todaySets = history
@@ -301,6 +305,7 @@ class LogViewModel extends ChangeNotifier {
           trainingMode: trainingModeFor(s.exercise),
         );
         _applyRec(ex);
+        ex.cloudRecommendation = savedCloudRecs[s.exercise];
         session.add(ex);
         idx = session.length - 1;
       }
