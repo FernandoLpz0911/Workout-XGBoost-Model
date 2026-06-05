@@ -49,6 +49,10 @@ _PREMIUM_TTL = 60.0
 _PREMIUM_CACHE_MAX = 500
 _premium_cache: dict[str, tuple[bool, float]] = {}
 
+# UIDs with a background training job currently running. Checked in /train to
+# reject concurrent submissions and prevent GCS / Firestore write races.
+_training_in_progress: set[str] = set()
+
 _gcs_client = gcs.Client()
 
 
@@ -152,39 +156,43 @@ def require_premium(uid: str = Depends(get_uid)) -> str:
 
 def _run_train(uid: str, csv_bytes: bytes) -> None:
     """Train model and save to GCS. Runs in a FastAPI background task."""
+    _training_in_progress.add(uid)
     db = admin_firestore.client()
     status_ref = (
         db.collection("users").document(uid)
         .collection("trainingStatus").document("current")
     )
     try:
-        status_ref.set({
-            "status": "training",
-            "startedAt": admin_firestore.SERVER_TIMESTAMP,
-        })
-    except Exception:  # noqa: BLE001
-        pass  # never let a status write abort the training run
-    try:
-        model, feature_cols, summary = run_pipeline(io.BytesIO(csv_bytes))
-        _save_user_model(uid, model, feature_cols, summary)
         try:
             status_ref.set({
-                "status": "complete",
-                "completedAt": admin_firestore.SERVER_TIMESTAMP,
+                "status": "training",
+                "startedAt": admin_firestore.SERVER_TIMESTAMP,
             })
         except Exception:  # noqa: BLE001
-            pass
-        print(f"Training complete for {uid}")
-    except Exception as exc:  # noqa: BLE001
+            pass  # never let a status write abort the training run
         try:
-            status_ref.set({
-                "status": "failed",
-                "error": str(exc),
-                "failedAt": admin_firestore.SERVER_TIMESTAMP,
-            })
-        except Exception:  # noqa: BLE001
-            pass
-        print(f"Training error for {uid}: {exc}")
+            model, feature_cols, summary = run_pipeline(io.BytesIO(csv_bytes))
+            _save_user_model(uid, model, feature_cols, summary)
+            try:
+                status_ref.set({
+                    "status": "complete",
+                    "completedAt": admin_firestore.SERVER_TIMESTAMP,
+                })
+            except Exception:  # noqa: BLE001
+                pass
+            print(f"Training complete for {uid}")
+        except Exception as exc:  # noqa: BLE001
+            try:
+                status_ref.set({
+                    "status": "failed",
+                    "error": str(exc),
+                    "failedAt": admin_firestore.SERVER_TIMESTAMP,
+                })
+            except Exception:  # noqa: BLE001
+                pass
+            print(f"Training error for {uid}: {exc}")
+    finally:
+        _training_in_progress.discard(uid)
 
 
 @app.post("/train")
@@ -196,6 +204,8 @@ async def train_model(
     """Upload CSV, retrain model in background, return immediately."""
     if not file.filename.endswith(".csv"):
         raise HTTPException(400, "Only CSV files are allowed.")
+    if uid in _training_in_progress:
+        raise HTTPException(409, "Training already in progress for this account.")
     csv_bytes = await file.read()
     background_tasks.add_task(_run_train, uid, csv_bytes)
     return {"message": "Training started. Model will update in the background."}
