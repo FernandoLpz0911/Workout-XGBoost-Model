@@ -19,7 +19,9 @@ from pipeline import run_pipeline
 
 app = FastAPI(title="Workout ML API")
 
-if not firebase_admin._apps:
+try:
+    firebase_admin.get_app()
+except ValueError:
     firebase_admin.initialize_app()
 
 app.add_middleware(
@@ -99,7 +101,7 @@ def _load_user_model(uid: str) -> tuple | None:
 
         _model_cache[uid] = (model, feature_cols, summary)
         return _model_cache[uid]
-    except Exception:
+    except Exception:  # noqa: BLE001 — any GCS/network failure is a silent cache miss
         return None
 
 

@@ -1,5 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:exercise_analyzer/models/recommendation_models.dart';
+import 'package:repiq/models/recommendation_models.dart';
 
 void main() {
   group('Recommendation — fromJson', () {
