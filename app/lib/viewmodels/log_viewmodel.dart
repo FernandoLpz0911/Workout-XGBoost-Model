@@ -504,8 +504,12 @@ class LogViewModel extends ChangeNotifier {
     lastActionMessage = null;
     notifyListeners();
     try {
-      final bytes = await _storage.exportAsCsvBytes();
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token == null) {
+        lastActionMessage = 'Sign in required to retrain the cloud model.';
+        return;
+      }
+      final bytes = await _storage.exportAsCsvBytes();
       await _api.trainFromCsvBytes(bytes, authToken: token);
       AnalyticsService.logCloudRetrain();
       lastActionMessage =
@@ -527,11 +531,14 @@ class LogViewModel extends ChangeNotifier {
       final col = _setsCollection();
       if (col != null) {
         final snap = await col.get();
-        final batch = FirebaseFirestore.instance.batch();
-        for (final doc in snap.docs) {
-          batch.delete(doc.reference);
+        const chunkSize = 400;
+        for (var i = 0; i < snap.docs.length; i += chunkSize) {
+          final batch = FirebaseFirestore.instance.batch();
+          for (final doc in snap.docs.skip(i).take(chunkSize)) {
+            batch.delete(doc.reference);
+          }
+          await batch.commit();
         }
-        await batch.commit();
       }
     } catch (_) {}
     final prefs = _prefs ??= await SharedPreferences.getInstance();

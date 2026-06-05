@@ -229,7 +229,19 @@ async def train_model(
     if not _claim(db.transaction()):
         raise HTTPException(409, "Training already in progress for this account.")
 
-    csv_bytes = await file.read()
+    try:
+        csv_bytes = await file.read()
+    except Exception:
+        try:
+            ref.set({
+                "status": "failed",
+                "error": "File upload failed.",
+                "failedAt": admin_firestore.SERVER_TIMESTAMP,
+            })
+        except Exception:  # noqa: BLE001
+            pass
+        raise HTTPException(400, "Failed to read uploaded file.")
+
     background_tasks.add_task(_run_train, uid, csv_bytes)
     return {"message": "Training started. Poll trainingStatus/current for progress."}
 
