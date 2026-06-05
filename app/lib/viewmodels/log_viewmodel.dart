@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/analytics_service.dart';
@@ -115,6 +116,13 @@ class LogViewModel extends ChangeNotifier {
   int localSetCount = 0;
 
   Map<String, TrainingMode> _trainingModes = {};
+
+  bool _isPremium = false;
+  SharedPreferences? _prefs;
+
+  /// Called by [_AppRoot] whenever [SubscriptionViewModel.isPremium] changes.
+  /// Skips cloud rec HTTP calls entirely for free users.
+  void updatePremiumStatus(bool premium) => _isPremium = premium;
 
   /// Cached result of grouping [history] by date — rebuilt only when history
   /// changes, not on every widget rebuild.
@@ -238,6 +246,7 @@ class LogViewModel extends ChangeNotifier {
   Future<void> _initialize() async {
     isDictLoading = true;
     notifyListeners();
+    _prefs = await SharedPreferences.getInstance();
     await _loadHistory();
     await _loadTrainingModes();
     _rebuildDict();
@@ -325,9 +334,10 @@ class LogViewModel extends ChangeNotifier {
     }
   }
 
-  /// Attempts to fetch a cloud XGBoost recommendation. Silently no-ops on
-  /// 403 (free tier) and 404 (model not trained yet).
+  /// Attempts to fetch a cloud XGBoost recommendation. Skipped entirely for
+  /// free users so no HTTP round-trip is wasted on a guaranteed 403.
   void _tryCloudRec(SessionExercise ex) async {
+    if (!_isPremium) return;
     try {
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
       if (token == null) return;
@@ -390,7 +400,7 @@ class LogViewModel extends ChangeNotifier {
     _storage.appendSets([set]);
     _syncSetToFirestore(set);
     AnalyticsService.logSetLogged(set.exercise);
-    NotificationService.scheduleWorkoutReminder();
+    _scheduleReminderIfNeeded();
     _maybeLogStreakMilestone();
   }
 
@@ -399,6 +409,16 @@ class LogViewModel extends ChangeNotifier {
     if (s == 3 || s == 7 || s == 14 || s == 30) {
       AnalyticsService.logStreakMilestone(s);
     }
+  }
+
+  /// Schedules the 3-day workout reminder at most once per calendar day so
+  /// logging many sets in one session doesn't spam cancel+reschedule.
+  void _scheduleReminderIfNeeded() async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    final today = _fmtDate(DateTime.now());
+    if (prefs.getString('last_notif_day') == today) return;
+    await prefs.setString('last_notif_day', today);
+    NotificationService.scheduleWorkoutReminder();
   }
 
   /// Removes the set at [setIndex] from the session and from storage.
@@ -518,25 +538,38 @@ class LogViewModel extends ChangeNotifier {
         .collection('sets');
   }
 
-  /// Pull any sets stored in Firestore that are not yet in the local DB.
-  /// Fire-and-forget — failure is silently ignored so offline use is unaffected.
+  /// Pulls sets from Firestore that are newer than the last sync timestamp.
+  /// On first run (no timestamp) fetches everything. Fire-and-forget.
   void _syncFromFirestore() async {
     try {
       final col = _setsCollection();
       if (col == null) return;
-      final snap = await col.get();
-      if (snap.docs.isEmpty) return;
-      final remoteSets =
-          snap.docs.map((d) => WorkoutSet.fromJson(d.data())).toList();
-      await _storage.appendSets(remoteSets);
-      // Reload only if new sets were actually added.
-      final newCount = await _storage.count();
-      if (newCount != localSetCount) {
-        await _loadHistory();
-        _rebuildDict();
-        _loadTodaySession();
-        notifyListeners();
+
+      final prefs = _prefs ??= await SharedPreferences.getInstance();
+      final lastMs = prefs.getInt('last_firestore_sync_ms');
+
+      final Query<Map<String, dynamic>> query = lastMs == null
+          ? col
+          : col.where('createdAt',
+              isGreaterThan: Timestamp.fromMillisecondsSinceEpoch(lastMs));
+
+      final snap = await query.get();
+
+      if (snap.docs.isNotEmpty) {
+        final remoteSets =
+            snap.docs.map((d) => WorkoutSet.fromJson(d.data())).toList();
+        await _storage.appendSets(remoteSets);
+        final newCount = await _storage.count();
+        if (newCount != localSetCount) {
+          await _loadHistory();
+          _rebuildDict();
+          _loadTodaySession();
+          notifyListeners();
+        }
       }
+
+      await prefs.setInt(
+          'last_firestore_sync_ms', DateTime.now().millisecondsSinceEpoch);
     } catch (_) {}
   }
 
@@ -545,7 +578,10 @@ class LogViewModel extends ChangeNotifier {
       final col = _setsCollection();
       if (col == null) return;
       final id = LocalStorageService.fingerprintFor(set);
-      await col.doc(id).set(set.toJson());
+      await col.doc(id).set({
+        ...set.toJson(),
+        'createdAt': FieldValue.serverTimestamp(),
+      });
     } catch (_) {}
   }
 
