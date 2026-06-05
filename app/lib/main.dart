@@ -151,6 +151,7 @@ class _AppRootState extends State<_AppRoot> {
   Widget build(BuildContext context) => const _AppShell();
 }
 
+/// Bottom-navigation shell holding the four main app tabs via [IndexedStack].
 class _AppShell extends StatefulWidget {
   const _AppShell();
 
@@ -262,6 +263,7 @@ class _TimerAction extends StatelessWidget {
   }
 }
 
+/// Bottom sheet with timer controls, volume, and auto-start settings.
 class _TimerSheet extends StatelessWidget {
   const _TimerSheet();
 
@@ -405,6 +407,7 @@ class _TimerSheet extends StatelessWidget {
   }
 }
 
+/// Compact icon button used for the ±15 s timer adjustment controls.
 class _SheetButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
@@ -427,6 +430,7 @@ class _SheetButton extends StatelessWidget {
   }
 }
 
+/// Labeled checkbox row used for vibrate / sound / auto-start toggles.
 class _SettingCheck extends StatelessWidget {
   final String label;
   final bool value;
