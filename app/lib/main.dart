@@ -1,13 +1,19 @@
+import 'dart:ui';
+
+import 'package:firebase_analytics/firebase_analytics.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/firebase_options.dart';
+import 'package:repiq/services/notification_service.dart';
 import 'package:repiq/services/rest_timer.dart';
 import 'package:repiq/viewmodels/auth_viewmodel.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/viewmodels/subscription_viewmodel.dart';
 import 'package:repiq/views/history_view.dart';
 import 'package:repiq/views/log_view.dart';
+import 'package:repiq/views/onboarding_view.dart';
 import 'package:repiq/views/progress_view.dart';
 import 'package:repiq/views/settings_view.dart';
 import 'package:repiq/views/sign_in_view.dart';
@@ -15,6 +21,17 @@ import 'package:repiq/views/sign_in_view.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+
+  // Route all Flutter framework errors to Crashlytics.
+  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
+  // Route uncaught async errors (e.g. in isolates) to Crashlytics.
+  PlatformDispatcher.instance.onError = (error, stack) {
+    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
+    return true;
+  };
+
+  await NotificationService.init();
+
   runApp(const WorkoutApp());
 }
 
@@ -45,9 +62,43 @@ class WorkoutApp extends StatelessWidget {
           cardColor: const Color(0xFF262730),
           useMaterial3: true,
         ),
-        home: const _AuthGate(),
+        navigatorObservers: [
+          FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance),
+        ],
+        home: const _RootGate(),
       ),
     );
+  }
+}
+
+/// Checks onboarding completion before routing to the auth gate.
+class _RootGate extends StatefulWidget {
+  const _RootGate();
+  @override
+  State<_RootGate> createState() => _RootGateState();
+}
+
+class _RootGateState extends State<_RootGate> {
+  bool? _done;
+
+  @override
+  void initState() {
+    super.initState();
+    isOnboardingDone().then((v) => setState(() => _done = v));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_done == null) {
+      return const Scaffold(
+        backgroundColor: Color(0xFF0E1117),
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
+    if (!_done!) {
+      return OnboardingView(onComplete: () => setState(() => _done = true));
+    }
+    return const _AuthGate();
   }
 }
 

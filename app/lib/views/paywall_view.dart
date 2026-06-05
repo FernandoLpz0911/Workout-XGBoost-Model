@@ -3,6 +3,7 @@ import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/services/subscription_service.dart';
 import 'package:repiq/viewmodels/subscription_viewmodel.dart';
+import 'package:repiq/views/legal_view.dart';
 
 /// Subscription paywall — shown when a user taps a premium-locked feature.
 class PaywallView extends StatelessWidget {
@@ -58,13 +59,22 @@ class PaywallView extends StatelessWidget {
                   Wrap(
                     alignment: WrapAlignment.center,
                     spacing: 4,
-                    children: const [
-                      Text('Privacy Policy',
-                          style: TextStyle(color: Colors.grey, fontSize: 12)),
-                      Text('·',
-                          style: TextStyle(color: Colors.grey, fontSize: 12)),
-                      Text('Terms of Service',
-                          style: TextStyle(color: Colors.grey, fontSize: 12)),
+                    children: [
+                      GestureDetector(
+                        onTap: () => LegalView.showPrivacy(context),
+                        child: const Text('Privacy Policy',
+                            style: TextStyle(
+                                color: Colors.blueAccent, fontSize: 12)),
+                      ),
+                      const Text('·',
+                          style:
+                              TextStyle(color: Colors.grey, fontSize: 12)),
+                      GestureDetector(
+                        onTap: () => LegalView.showTerms(context),
+                        child: const Text('Terms of Service',
+                            style: TextStyle(
+                                color: Colors.blueAccent, fontSize: 12)),
+                      ),
                     ],
                   ),
                 ],

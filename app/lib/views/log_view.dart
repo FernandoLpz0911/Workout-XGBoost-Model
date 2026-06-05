@@ -23,12 +23,18 @@ class LogView extends StatelessWidget {
         }
         return Scaffold(
           body: vm.session.isEmpty
-              ? _EmptySessionView(onAdd: () => _showAddExercise(context, vm))
+              ? _EmptySessionView(
+                  streak: vm.currentStreak,
+                  onAdd: () => _showAddExercise(context, vm))
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 16, 100),
-                  itemCount: vm.session.length,
-                  itemBuilder: (context, i) =>
-                      _ExerciseCard(vm: vm, index: i),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                  itemCount: vm.session.length + 1,
+                  itemBuilder: (context, i) {
+                    if (i == 0) {
+                      return _StreakBanner(streak: vm.currentStreak);
+                    }
+                    return _ExerciseCard(vm: vm, index: i - 1);
+                  },
                 ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _showAddExercise(context, vm),
@@ -49,9 +55,43 @@ class LogView extends StatelessWidget {
   }
 }
 
+class _StreakBanner extends StatelessWidget {
+  final int streak;
+  const _StreakBanner({required this.streak});
+
+  @override
+  Widget build(BuildContext context) {
+    if (streak == 0) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.amber.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('🔥', style: TextStyle(fontSize: 18)),
+            const SizedBox(width: 8),
+            Text(
+              '$streak-day streak — keep it going!',
+              style: const TextStyle(
+                  color: Colors.amber, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _EmptySessionView extends StatelessWidget {
+  final int streak;
   final VoidCallback onAdd;
-  const _EmptySessionView({required this.onAdd});
+  const _EmptySessionView({required this.streak, required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -62,14 +102,17 @@ class _EmptySessionView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
+          if (streak > 0) ...[
+            _StreakBanner(streak: streak),
+            const SizedBox(height: 8),
+          ],
           Text(dateStr,
               style: const TextStyle(fontSize: 18, color: Colors.grey)),
           const SizedBox(height: 20),
           const Icon(Icons.fitness_center, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
           const Text('No exercises yet',
-              style:
-                  TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
           const Text('Tap the button below to start logging.',
               style: TextStyle(color: Colors.grey)),
@@ -267,8 +310,12 @@ class _RecBanner extends StatelessWidget {
           icon: Icons.info_outline,
           text: ex.recError!);
     }
-    final rec = ex.recommendation;
+    final localRec = ex.recommendation;
+    final cloudRec = ex.cloudRecommendation;
+    final rec = cloudRec ?? localRec;
     if (rec == null) return const SizedBox.shrink();
+
+    final isCloud = cloudRec != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -276,27 +323,53 @@ class _RecBanner extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.12),
+            color: (isCloud ? Colors.greenAccent : Colors.blue)
+                .withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [
-              const Icon(Icons.auto_awesome, color: Colors.blue, size: 18),
+              Icon(isCloud ? Icons.model_training : Icons.auto_awesome,
+                  color: isCloud ? Colors.greenAccent : Colors.blue,
+                  size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      '3 × ${rec.targetReps} reps  @  '
-                      '${rec.targetWeight.toStringAsFixed(1)} lbs',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 15),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '3 × ${rec.targetReps} reps  @  '
+                            '${rec.targetWeight.toStringAsFixed(1)} lbs',
+                            style: const TextStyle(
+                                fontWeight: FontWeight.bold, fontSize: 15),
+                          ),
+                        ),
+                        if (isCloud)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.greenAccent.withValues(alpha: 0.2),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: const Text('AI Model',
+                                style: TextStyle(
+                                    color: Colors.greenAccent,
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.bold)),
+                          ),
+                      ],
                     ),
                     const SizedBox(height: 2),
                     Text(rec.status,
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.blueAccent)),
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: isCloud
+                                ? Colors.greenAccent
+                                : Colors.blueAccent)),
                   ],
                 ),
               ),
