@@ -1,4 +1,13 @@
-"""Workout ML — FastAPI backend serving per-user XGBoost models."""
+"""Workout ML — FastAPI backend serving per-user XGBoost models.
+
+Endpoints
+---------
+POST /train       Retrain the user's XGBoost model from a CSV export (premium only).
+GET  /exercises   List exercises derived from the user's training history.
+POST /recommend   Return an AI weight/rep target for a given exercise.
+
+Every route requires a Firebase ID token in ``Authorization: Bearer <token>``.
+"""
 
 import io
 import os
@@ -12,9 +21,10 @@ import pandas as pd
 from firebase_admin import auth as firebase_auth
 from firebase_admin import firestore as admin_firestore
 from fastapi import (
-    BackgroundTasks, Depends, FastAPI, Header, HTTPException, UploadFile, File
+    BackgroundTasks, Depends, FastAPI, File, Header, HTTPException, UploadFile,
 )
 from fastapi.middleware.cors import CORSMiddleware
+from google.cloud import firestore as gcp_firestore
 from google.cloud import storage as gcs
 from pydantic import BaseModel
 
@@ -36,39 +46,44 @@ app.add_middleware(
 )
 
 _GCS_BUCKET = os.getenv("GCS_BUCKET", "workout-ml-user-models")
+_gcs_client = gcs.Client()
 
-# Capped at _CACHE_MAX entries. Oldest UID evicted when limit hit so Cloud Run
-# memory stays bounded regardless of how many users train models.
+# In-process FIFO cache for loaded models. Capped so Cloud Run memory stays
+# bounded regardless of how many distinct users are active on one instance.
 _CACHE_MAX = 50
 _model_cache: dict[str, tuple] = {}
 
-# Premium status cached for _PREMIUM_TTL seconds to avoid a Firestore read on
-# every /train and /recommend call. uid → (is_premium, expiry_monotonic)
-# Capped at _PREMIUM_CACHE_MAX entries with FIFO eviction (same as _model_cache).
+# Per-UID premium flag cached to avoid a Firestore read on every request.
+# 60-second TTL means a just-cancelled subscription stays effective briefly,
+# which is acceptable given the low monetary impact.
 _PREMIUM_TTL = 60.0
 _PREMIUM_CACHE_MAX = 500
 _premium_cache: dict[str, tuple[bool, float]] = {}
-
-# UIDs with a background training job currently running. Checked in /train to
-# reject concurrent submissions and prevent GCS / Firestore write races.
-_training_in_progress: set[str] = set()
-
-_gcs_client = gcs.Client()
 
 
 def _gcs_prefix(uid: str) -> str:
     return f"user_models/{uid}"
 
 
-def _evict_if_needed() -> None:
+def _evict_model_cache() -> None:
+    """Drop the oldest entry when the model cache is at capacity."""
     if len(_model_cache) >= _CACHE_MAX:
         del _model_cache[next(iter(_model_cache))]
+
+
+def _training_status_ref(uid: str):
+    """Return the Firestore reference for the user's training-status document."""
+    return (
+        admin_firestore.client()
+        .collection("users").document(uid)
+        .collection("trainingStatus").document("current")
+    )
 
 
 def _save_user_model(
     uid: str, model, feature_cols: list, summary: pd.DataFrame
 ) -> None:
-    """Serialize and upload all three artifacts to GCS, then update cache."""
+    """Upload the model, feature list, and summary CSV to GCS, then warm the cache."""
     bucket = _gcs_client.bucket(_GCS_BUCKET)
     prefix = _gcs_prefix(uid)
 
@@ -88,12 +103,12 @@ def _save_user_model(
         csv_buf, content_type="text/csv"
     )
 
-    _evict_if_needed()
+    _evict_model_cache()
     _model_cache[uid] = (model, feature_cols, summary)
 
 
 def _load_user_model(uid: str) -> tuple | None:
-    """Load from cache or GCS. None if no model exists for this user."""
+    """Return ``(model, feature_cols, summary)`` from cache or GCS, or None if untrained."""
     if uid in _model_cache:
         return _model_cache[uid]
     try:
@@ -105,23 +120,19 @@ def _load_user_model(uid: str) -> tuple | None:
         cols_buf = io.BytesIO(
             bucket.blob(f"{prefix}/feature_cols.joblib").download_as_bytes()
         )
-        csv_bytes = bucket.blob(
-            f"{prefix}/workout_summary.csv"
-        ).download_as_bytes()
+        csv_bytes = bucket.blob(f"{prefix}/workout_summary.csv").download_as_bytes()
         model = joblib.load(model_buf)
         feature_cols = joblib.load(cols_buf)
         summary = pd.read_csv(io.BytesIO(csv_bytes), parse_dates=["Date"])
-        _evict_if_needed()
+        _evict_model_cache()
         _model_cache[uid] = (model, feature_cols, summary)
         return _model_cache[uid]
     except Exception:  # noqa: BLE001
         return None
 
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
-
-
 def get_uid(authorization: Optional[str] = Header(None)) -> str:
+    """FastAPI dependency — verify the Bearer token and return the Firebase UID."""
     if not authorization or not authorization.startswith("Bearer "):
         raise HTTPException(401, "Missing Authorization header.")
     token = authorization.removeprefix("Bearer ")
@@ -132,6 +143,11 @@ def get_uid(authorization: Optional[str] = Header(None)) -> str:
 
 
 def require_premium(uid: str = Depends(get_uid)) -> str:
+    """FastAPI dependency — ensure the caller holds an active Premium subscription.
+
+    Results are cached per UID for ``_PREMIUM_TTL`` seconds to avoid a
+    Firestore round-trip on every request.
+    """
     now = time.monotonic()
     cached = _premium_cache.get(uid)
     if cached is not None and now < cached[1]:
@@ -151,48 +167,33 @@ def require_premium(uid: str = Depends(get_uid)) -> str:
     return uid
 
 
-# ── Endpoints ─────────────────────────────────────────────────────────────────
-
-
 def _run_train(uid: str, csv_bytes: bytes) -> None:
-    """Train model and save to GCS. Runs in a FastAPI background task."""
-    _training_in_progress.add(uid)
-    db = admin_firestore.client()
-    status_ref = (
-        db.collection("users").document(uid)
-        .collection("trainingStatus").document("current")
-    )
+    """Run the ML pipeline and persist the result to GCS.
+
+    Invoked as a FastAPI background task so the HTTP response returns
+    immediately. Training status is written to Firestore (best-effort) so
+    clients can poll ``trainingStatus/current`` for progress. A Firestore
+    error will never abort the training run itself.
+    """
+    ref = _training_status_ref(uid)
     try:
+        model, feature_cols, summary = run_pipeline(io.BytesIO(csv_bytes))
+        _save_user_model(uid, model, feature_cols, summary)
         try:
-            status_ref.set({
-                "status": "training",
-                "startedAt": admin_firestore.SERVER_TIMESTAMP,
+            ref.set({"status": "complete", "completedAt": admin_firestore.SERVER_TIMESTAMP})
+        except Exception:  # noqa: BLE001
+            pass
+        print(f"Training complete for {uid}")
+    except Exception as exc:  # noqa: BLE001
+        try:
+            ref.set({
+                "status": "failed",
+                "error": str(exc),
+                "failedAt": admin_firestore.SERVER_TIMESTAMP,
             })
         except Exception:  # noqa: BLE001
-            pass  # never let a status write abort the training run
-        try:
-            model, feature_cols, summary = run_pipeline(io.BytesIO(csv_bytes))
-            _save_user_model(uid, model, feature_cols, summary)
-            try:
-                status_ref.set({
-                    "status": "complete",
-                    "completedAt": admin_firestore.SERVER_TIMESTAMP,
-                })
-            except Exception:  # noqa: BLE001
-                pass
-            print(f"Training complete for {uid}")
-        except Exception as exc:  # noqa: BLE001
-            try:
-                status_ref.set({
-                    "status": "failed",
-                    "error": str(exc),
-                    "failedAt": admin_firestore.SERVER_TIMESTAMP,
-                })
-            except Exception:  # noqa: BLE001
-                pass
-            print(f"Training error for {uid}: {exc}")
-    finally:
-        _training_in_progress.discard(uid)
+            pass
+        print(f"Training error for {uid}: {exc}")
 
 
 @app.post("/train")
@@ -201,18 +202,41 @@ async def train_model(
     file: UploadFile = File(...),
     uid: str = Depends(require_premium),
 ):
-    """Upload CSV, retrain model in background, return immediately."""
+    """Accept a CSV upload and queue a background model retrain.
+
+    A Firestore transaction atomically claims the training slot before queuing
+    the job, preventing concurrent submissions from racing on the same GCS
+    artifacts across multiple Cloud Run instances. Poll
+    ``trainingStatus/current`` for progress.
+    """
     if not file.filename.endswith(".csv"):
         raise HTTPException(400, "Only CSV files are allowed.")
-    if uid in _training_in_progress:
+
+    db = admin_firestore.client()
+    ref = _training_status_ref(uid)
+
+    @gcp_firestore.transactional
+    def _claim(transaction):
+        snap = ref.get(transaction=transaction)
+        if snap.exists and snap.to_dict().get("status") == "training":
+            return False
+        transaction.set(ref, {
+            "status": "training",
+            "startedAt": admin_firestore.SERVER_TIMESTAMP,
+        })
+        return True
+
+    if not _claim(db.transaction()):
         raise HTTPException(409, "Training already in progress for this account.")
+
     csv_bytes = await file.read()
     background_tasks.add_task(_run_train, uid, csv_bytes)
-    return {"message": "Training started. Model will update in the background."}
+    return {"message": "Training started. Poll trainingStatus/current for progress."}
 
 
 @app.get("/exercises")
 def get_exercises(uid: str = Depends(get_uid)):
+    """Return the user's exercise catalogue grouped by category."""
     assets = _load_user_model(uid)
     if assets is None:
         raise HTTPException(404, "No trained model. Upload CSV via /train.")
@@ -232,12 +256,13 @@ class WorkoutRequest(BaseModel):
 
 
 def _get_weight(one_rm: float, reps: int) -> float:
+    """Convert a 1RM estimate to a working weight using the Epley formula."""
     return one_rm / (1 + 0.0333 * reps)
 
 
 @app.post("/recommend")
 def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
-    """Return AI recommendation for the exercise (auth required)."""
+    """Return an AI-generated weight and rep target for the requested exercise."""
     assets = _load_user_model(uid)
     if assets is None:
         raise HTTPException(404, "No trained model. Upload CSV via /train.")
@@ -321,18 +346,13 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
 
     insights = []
     if had_form:
-        insights.append(
-            "Form issues logged last session — prioritize technique today."
-        )
+        insights.append("Form issues logged last session — prioritize technique today.")
     if plateau:
         insights.append(
-            "No 1RM gain in 4 sessions. "
-            "Deload at 60% load to rebuild capacity."
+            "No 1RM gain in 4 sessions. Deload at 60% load to rebuild capacity."
         )
     if had_fatigue:
-        insights.append(
-            "Fatigue logged last session — consider a grip aid or extra rest."
-        )
+        insights.append("Fatigue logged last session — consider a grip aid or extra rest.")
     if rm_momentum < -2:
         insights.append("1RM declining — deload or extra recovery may help.")
     elif rm_momentum > 5:

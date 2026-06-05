@@ -12,11 +12,10 @@ import 'package:repiq/services/notification_service.dart';
 
 export '../models/recommendation_models.dart' show TrainingMode;
 
-// ── Isolate helpers ───────────────────────────────────────────────────────────
-
-/// Passed to the recommendation isolate — only carries the target exercise's
-/// sets so the serialization cost stays proportional to that exercise, not the
-/// full history.
+/// Parameters passed to the recommendation isolate for one exercise.
+///
+/// Only the target exercise's sets are serialized to bound transfer cost
+/// relative to full history size.
 class _RecParams {
   final String exercise;
   final String category;
@@ -34,8 +33,6 @@ Recommendation _computeRec(_RecParams p) {
     mode: p.mode == 'strength' ? TrainingMode.strength : TrainingMode.hypertrophy,
   );
 }
-
-// ── Domain types ─────────────────────────────────────────────────────────────
 
 /// Broad category of an exercise, used to route UI and recommendation logic.
 enum ExerciseType { strength, cardio, passive }
@@ -57,19 +54,17 @@ class SessionExercise {
   /// Persists across sessions via [LogViewModel].
   TrainingMode trainingMode;
 
-  /// The AI-generated recommendation for this session. Null until computed,
-  /// or for non-strength exercises.
+  /// Local AI recommendation. Null until computed, or for non-strength exercises.
   Recommendation? recommendation;
 
   /// Cloud XGBoost recommendation — non-null for premium users who have trained
-  /// a model. Overwrites [recommendation] in the UI when available.
+  /// a model. Takes precedence over [recommendation] in the UI when available.
   Recommendation? cloudRecommendation;
 
   /// Non-null when recommendation computation failed.
   String? recError;
 
-  /// Human-readable summary of the last cardio or passive session, shown
-  /// instead of a strength recommendation for those exercise types.
+  /// Human-readable summary of the last cardio or passive session.
   String? lastSessionSummary;
 
   final List<WorkoutSet> sets = [];
@@ -80,8 +75,6 @@ class SessionExercise {
     this.trainingMode = TrainingMode.hypertrophy,
   });
 }
-
-// ── ViewModel ─────────────────────────────────────────────────────────────────
 
 /// Central state manager for the app (Provider / [ChangeNotifier]).
 ///
@@ -119,10 +112,6 @@ class LogViewModel extends ChangeNotifier {
 
   bool _isPremium = false;
   SharedPreferences? _prefs;
-
-  /// Called by [_AppRoot] whenever [SubscriptionViewModel.isPremium] changes.
-  /// Skips cloud rec HTTP calls entirely for free users.
-  void updatePremiumStatus(bool premium) => _isPremium = premium;
 
   /// Cached result of grouping [history] by date — rebuilt only when history
   /// changes, not on every widget rebuild.
@@ -182,6 +171,9 @@ class LogViewModel extends ChangeNotifier {
     _initialize();
   }
 
+  /// Called by [_AppRoot] whenever [SubscriptionViewModel.isPremium] changes.
+  void updatePremiumStatus(bool premium) => _isPremium = premium;
+
   /// Returns the saved [TrainingMode] for [exercise], defaulting to hypertrophy.
   TrainingMode trainingModeFor(String exercise) =>
       _trainingModes[exercise] ?? TrainingMode.hypertrophy;
@@ -214,8 +206,7 @@ class LogViewModel extends ChangeNotifier {
   int get currentStreak {
     if (history.isEmpty) return 0;
     final today = DateTime.now();
-    final loggedDays =
-        history.map((s) => _fmtDate(s.date)).toSet();
+    final loggedDays = history.map((s) => _fmtDate(s.date)).toSet();
 
     var check = DateTime(today.year, today.month, today.day);
     if (!loggedDays.contains(_fmtDate(check))) {
@@ -229,8 +220,8 @@ class LogViewModel extends ChangeNotifier {
     return streak;
   }
 
-  /// History grouped by date string (`"YYYY-MM-DD"`), sorted newest-first.
-  /// Result is cached and only rebuilt when history actually changes.
+  /// History grouped by date string (``"YYYY-MM-DD"``), sorted newest-first.
+  /// Cached and only rebuilt when history actually changes.
   Map<String, List<WorkoutSet>> get historyByDate {
     if (_historyByDateCache != null) return _historyByDateCache!;
     final grouped = <String, List<WorkoutSet>>{};
@@ -253,7 +244,6 @@ class LogViewModel extends ChangeNotifier {
     _loadTodaySession();
     isDictLoading = false;
     notifyListeners();
-    // Fire-and-forget: pull any sets from Firestore that are missing locally.
     _syncFromFirestore();
   }
 
@@ -282,7 +272,8 @@ class LogViewModel extends ChangeNotifier {
   }
 
   /// Restores any exercises already logged today so a mid-session app restart
-  /// doesn't lose the current session.
+  /// doesn't lose the current session. Preserves existing cloud recommendations
+  /// across rebuilds triggered by Firestore sync.
   void _loadTodaySession() {
     final savedCloudRecs = {
       for (final e in session)
@@ -339,8 +330,8 @@ class LogViewModel extends ChangeNotifier {
     }
   }
 
-  /// Attempts to fetch a cloud XGBoost recommendation. Skipped entirely for
-  /// free users so no HTTP round-trip is wasted on a guaranteed 403.
+  /// Fetches a cloud XGBoost recommendation. Skipped for free users so no
+  /// HTTP round-trip is wasted on a guaranteed 403.
   void _tryCloudRec(SessionExercise ex) async {
     if (!_isPremium) return;
     try {
@@ -362,8 +353,7 @@ class LogViewModel extends ChangeNotifier {
       ..sort((a, b) => b.date.compareTo(a.date));
     if (sets.isEmpty) return '';
     final lastDate = _fmtDate(sets.first.date);
-    final lastSets =
-        sets.where((s) => _fmtDate(s.date) == lastDate).toList();
+    final lastSets = sets.where((s) => _fmtDate(s.date) == lastDate).toList();
     if (exerciseTypeOf(category) == ExerciseType.cardio) {
       final totalDist =
           lastSets.fold(0.0, (acc, s) => acc + (s.distance ?? 0.0));
@@ -375,8 +365,8 @@ class LogViewModel extends ChangeNotifier {
     return dur != null ? 'Last session: $dur' : '';
   }
 
-  /// Adds [exercise] to the current session if it isn't already present,
-  /// and kicks off its recommendation computation.
+  /// Adds [exercise] to the current session if not already present and kicks
+  /// off its recommendation computation.
   void addExercise(String category, String exercise) {
     if (session.any(
         (e) => e.exercise == exercise && e.category == category)) {
@@ -417,7 +407,7 @@ class LogViewModel extends ChangeNotifier {
   }
 
   /// Schedules the 3-day workout reminder at most once per calendar day so
-  /// logging many sets in one session doesn't spam cancel+reschedule.
+  /// logging many sets in one session doesn't cancel and reschedule repeatedly.
   void _scheduleReminderIfNeeded() async {
     final prefs = _prefs ??= await SharedPreferences.getInstance();
     final today = _fmtDate(DateTime.now());
@@ -455,15 +445,21 @@ class LogViewModel extends ChangeNotifier {
     _syncSetToFirestore(updated);
   }
 
-  /// Removes an entire exercise and all its sets from the session and storage.
+  /// Removes an exercise and all its sets from the session, in-memory history,
+  /// local storage, and Firestore.
   void removeExercise(int index) {
     final sets = List<WorkoutSet>.from(session[index].sets);
     session.removeAt(index);
-    notifyListeners();
     for (final s in sets) {
+      history.removeWhere((h) =>
+          h.date.millisecondsSinceEpoch == s.date.millisecondsSinceEpoch &&
+          h.exercise == s.exercise);
       _storage.deleteSet(s);
       _syncDeleteFromFirestore(s);
     }
+    _invalidateHistoryCache();
+    localSetCount -= sets.length;
+    notifyListeners();
   }
 
   Future<void> _loadHistory() async {
@@ -502,7 +498,7 @@ class LogViewModel extends ChangeNotifier {
     }
   }
 
-  /// Exports local data as CSV and POSTs to the cloud `/train` endpoint.
+  /// Exports local data as CSV and POSTs to the cloud ``/train`` endpoint.
   Future<void> trainOnLocalData() async {
     isTraining = true;
     lastActionMessage = null;
@@ -523,16 +519,28 @@ class LogViewModel extends ChangeNotifier {
     }
   }
 
-  /// Permanently deletes all locally stored sets and clears the session.
+  /// Permanently wipes all local sets and the Firestore collection so data
+  /// does not re-sync on the next launch. Resets the sync timestamp accordingly.
   Future<void> clearLocalData() async {
     await _storage.clear();
+    try {
+      final col = _setsCollection();
+      if (col != null) {
+        final snap = await col.get();
+        final batch = FirebaseFirestore.instance.batch();
+        for (final doc in snap.docs) {
+          batch.delete(doc.reference);
+        }
+        await batch.commit();
+      }
+    } catch (_) {}
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    await prefs.remove('last_firestore_sync_ms');
     await _loadHistory();
     _rebuildDict();
     session.clear();
     notifyListeners();
   }
-
-  // ── Firestore sync ────────────────────────────────────────────────────────
 
   CollectionReference<Map<String, dynamic>>? _setsCollection() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
@@ -544,7 +552,7 @@ class LogViewModel extends ChangeNotifier {
   }
 
   /// Pulls sets from Firestore that are newer than the last sync timestamp.
-  /// On first run (no timestamp) fetches everything. Fire-and-forget.
+  /// On first run fetches everything. Fire-and-forget.
   void _syncFromFirestore() async {
     try {
       final col = _setsCollection();
@@ -598,8 +606,6 @@ class LogViewModel extends ChangeNotifier {
       await col.doc(id).delete();
     } catch (_) {}
   }
-
-  // ── Utilities ─────────────────────────────────────────────────────────────
 
   static String _fmtDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

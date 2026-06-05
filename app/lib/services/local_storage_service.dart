@@ -196,10 +196,9 @@ class LocalStorageService {
     await prefs.setString(_modesKey, jsonEncode(modes));
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
-
-  /// Day-level fingerprint used as PRIMARY KEY — stable across CSV re-imports.
-  /// Public so LogViewModel can derive Firestore doc IDs from it.
+  /// Day-level fingerprint used as the SQLite PRIMARY KEY and Firestore doc ID.
+  /// Stable across CSV re-imports; intentionally day-level so duplicate imports
+  /// are idempotent even when the original timestamp is unavailable.
   static String fingerprintFor(WorkoutSet s) {
     final d = s.date;
     final day =
