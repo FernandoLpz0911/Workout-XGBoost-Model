@@ -44,7 +44,9 @@ _model_cache: dict[str, tuple] = {}
 
 # Premium status cached for _PREMIUM_TTL seconds to avoid a Firestore read on
 # every /train and /recommend call. uid → (is_premium, expiry_monotonic)
+# Capped at _PREMIUM_CACHE_MAX entries with FIFO eviction (same as _model_cache).
 _PREMIUM_TTL = 60.0
+_PREMIUM_CACHE_MAX = 500
 _premium_cache: dict[str, tuple[bool, float]] = {}
 
 _gcs_client = gcs.Client()
@@ -137,6 +139,8 @@ def require_premium(uid: str = Depends(get_uid)) -> str:
     if not doc.exists:
         raise HTTPException(403, "No user record found.")
     is_premium = doc.to_dict().get("subscriptionStatus") == "active"
+    if len(_premium_cache) >= _PREMIUM_CACHE_MAX:
+        del _premium_cache[next(iter(_premium_cache))]
     _premium_cache[uid] = (is_premium, now + _PREMIUM_TTL)
     if not is_premium:
         raise HTTPException(403, "Active Premium subscription required.")
