@@ -129,8 +129,5 @@ def run_pipeline(uploaded_file):
     )
     model.fit(X, y)
 
-    joblib.dump(model, 'xgb_model.joblib')
-    joblib.dump(list(X.columns), 'feature_cols.joblib')
-    summary.to_csv('Processed_Workout_Data.csv', index=False)
     print("Pipeline complete.")
-    return True
+    return model, list(X.columns), summary

@@ -8,3 +8,4 @@ joblib
 scikit-learn
 python-multipart
 firebase-admin>=6.0.0
+google-cloud-storage>=2.0.0

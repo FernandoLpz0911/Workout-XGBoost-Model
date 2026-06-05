@@ -1,5 +1,8 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/api_service.dart';
@@ -7,6 +10,31 @@ import 'package:repiq/services/local_recommendation_engine.dart';
 import 'package:repiq/services/local_storage_service.dart';
 
 export '../models/recommendation_models.dart' show TrainingMode;
+
+// ── Isolate helpers ───────────────────────────────────────────────────────────
+
+/// Passed to the recommendation isolate — only carries the target exercise's
+/// sets so the serialization cost stays proportional to that exercise, not the
+/// full history.
+class _RecParams {
+  final String exercise;
+  final String category;
+  final List<Map<String, dynamic>> setsJson;
+  final String mode;
+  const _RecParams(this.exercise, this.category, this.setsJson, this.mode);
+}
+
+Recommendation _computeRec(_RecParams p) {
+  final sets = p.setsJson.map(WorkoutSet.fromJson).toList();
+  return LocalRecommendationEngine.recommend(
+    exercise: p.exercise,
+    category: p.category,
+    allHistory: sets,
+    mode: p.mode == 'strength' ? TrainingMode.strength : TrainingMode.hypertrophy,
+  );
+}
+
+// ── Domain types ─────────────────────────────────────────────────────────────
 
 /// Broad category of an exercise, used to route UI and recommendation logic.
 enum ExerciseType { strength, cardio, passive }
@@ -48,6 +76,8 @@ class SessionExercise {
   });
 }
 
+// ── ViewModel ─────────────────────────────────────────────────────────────────
+
 /// Central state manager for the app (Provider / [ChangeNotifier]).
 ///
 /// Owns:
@@ -81,6 +111,10 @@ class LogViewModel extends ChangeNotifier {
   int localSetCount = 0;
 
   Map<String, TrainingMode> _trainingModes = {};
+
+  /// Cached result of grouping [history] by date — rebuilt only when history
+  /// changes, not on every widget rebuild.
+  Map<String, List<WorkoutSet>>? _historyByDateCache;
 
   /// Built-in exercise list shown even before the user has any history.
   static const _presetExercises = <String, List<String>>{
@@ -145,8 +179,8 @@ class LogViewModel extends ChangeNotifier {
   void setTrainingMode(int index, TrainingMode mode) {
     session[index].trainingMode = mode;
     _trainingModes[session[index].exercise] = mode;
-    _applyRec(session[index]);
     _saveTrainingModes();
+    _applyRec(session[index]);
     notifyListeners();
   }
 
@@ -164,13 +198,18 @@ class LogViewModel extends ChangeNotifier {
   }
 
   /// History grouped by date string (`"YYYY-MM-DD"`), sorted newest-first.
+  /// Result is cached and only rebuilt when history actually changes.
   Map<String, List<WorkoutSet>> get historyByDate {
+    if (_historyByDateCache != null) return _historyByDateCache!;
     final grouped = <String, List<WorkoutSet>>{};
     for (final s in history) {
       grouped.putIfAbsent(_fmtDate(s.date), () => []).add(s);
     }
+    _historyByDateCache = grouped;
     return grouped;
   }
+
+  void _invalidateHistoryCache() => _historyByDateCache = null;
 
   Future<void> _initialize() async {
     isDictLoading = true;
@@ -181,12 +220,15 @@ class LogViewModel extends ChangeNotifier {
     _loadTodaySession();
     isDictLoading = false;
     notifyListeners();
+    // Fire-and-forget: pull any sets from Firestore that are missing locally.
+    _syncFromFirestore();
   }
 
   Future<void> _loadTrainingModes() async {
     final raw = await _storage.loadTrainingModes();
     _trainingModes = raw.map(
-      (k, v) => MapEntry(k, v == 'strength' ? TrainingMode.strength : TrainingMode.hypertrophy),
+      (k, v) => MapEntry(
+          k, v == 'strength' ? TrainingMode.strength : TrainingMode.hypertrophy),
     );
   }
 
@@ -233,18 +275,26 @@ class LogViewModel extends ChangeNotifier {
     }
   }
 
+  /// Kicks off recommendation computation in a background isolate.
+  /// Updates [ex] and calls [notifyListeners] when the result arrives.
   void _applyRec(SessionExercise ex) {
     if (exerciseTypeOf(ex.category) == ExerciseType.strength) {
-      try {
-        ex.recommendation = LocalRecommendationEngine.recommend(
-          exercise: ex.exercise,
-          category: ex.category,
-          allHistory: history,
-          mode: ex.trainingMode,
-        );
-      } catch (_) {
+      final params = _RecParams(
+        ex.exercise,
+        ex.category,
+        history
+            .where((s) => s.exercise == ex.exercise)
+            .map((s) => s.toJson())
+            .toList(),
+        ex.trainingMode.name,
+      );
+      compute(_computeRec, params).then((rec) {
+        ex.recommendation = rec;
+        notifyListeners();
+      }).catchError((_) {
         ex.recError = 'Could not compute recommendation.';
-      }
+        notifyListeners();
+      });
     } else {
       ex.lastSessionSummary = _lastSessionSummary(ex.exercise, ex.category);
     }
@@ -257,7 +307,8 @@ class LogViewModel extends ChangeNotifier {
       ..sort((a, b) => b.date.compareTo(a.date));
     if (sets.isEmpty) return '';
     final lastDate = _fmtDate(sets.first.date);
-    final lastSets = sets.where((s) => _fmtDate(s.date) == lastDate).toList();
+    final lastSets =
+        sets.where((s) => _fmtDate(s.date) == lastDate).toList();
     if (exerciseTypeOf(category) == ExerciseType.cardio) {
       final totalDist =
           lastSets.fold(0.0, (sum, s) => sum + (s.distance ?? 0.0));
@@ -270,7 +321,7 @@ class LogViewModel extends ChangeNotifier {
   }
 
   /// Adds [exercise] to the current session if it isn't already present,
-  /// and immediately computes its recommendation.
+  /// and kicks off its recommendation computation.
   void addExercise(String category, String exercise) {
     if (session.any(
         (e) => e.exercise == exercise && e.category == category)) {
@@ -286,25 +337,31 @@ class LogViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Appends [set] to the session and persists it immediately.
+  /// Appends [set] to the session, persists it, and syncs to Firestore.
   void logSet(int exerciseIndex, WorkoutSet set) {
     session[exerciseIndex].sets.add(set);
     history.insert(0, set);
+    _invalidateHistoryCache();
     localSetCount++;
     notifyListeners();
     _storage.appendSets([set]);
+    _syncSetToFirestore(set);
   }
 
   /// Removes the set at [setIndex] from the session and from storage.
   void removeSet(int exerciseIndex, int setIndex) {
     final set = session[exerciseIndex].sets.removeAt(setIndex);
+    history.removeWhere((s) =>
+        s.date.millisecondsSinceEpoch == set.date.millisecondsSinceEpoch &&
+        s.exercise == set.exercise);
+    _invalidateHistoryCache();
     localSetCount--;
     notifyListeners();
-    _deleteSetFromStorage(set);
+    _storage.deleteSet(set);
+    _syncDeleteFromFirestore(set);
   }
 
-  /// Replaces the set at [setIndex] with [updated], preserving its original
-  /// timestamp, and recomputes the recommendation with the new data.
+  /// Replaces the set at [setIndex] with [updated], persists, and re-syncs.
   void updateSet(int exerciseIndex, int setIndex, WorkoutSet updated) {
     final old = session[exerciseIndex].sets[setIndex];
     session[exerciseIndex].sets[setIndex] = updated;
@@ -312,18 +369,12 @@ class LogViewModel extends ChangeNotifier {
         s.date.millisecondsSinceEpoch == old.date.millisecondsSinceEpoch &&
         s.exercise == old.exercise);
     if (hi != -1) history[hi] = updated;
+    _invalidateHistoryCache();
     _applyRec(session[exerciseIndex]);
     notifyListeners();
-    _persistUpdate(old, updated);
-  }
-
-  Future<void> _persistUpdate(WorkoutSet old, WorkoutSet updated) async {
-    final all = await _storage.loadAll();
-    final i = all.indexWhere((s) =>
-        s.date.millisecondsSinceEpoch == old.date.millisecondsSinceEpoch &&
-        s.exercise == old.exercise);
-    if (i != -1) all[i] = updated;
-    await _storage.saveAll(all);
+    _storage.updateSet(old, updated);
+    _syncDeleteFromFirestore(old);
+    _syncSetToFirestore(updated);
   }
 
   /// Removes an entire exercise and all its sets from the session and storage.
@@ -332,20 +383,9 @@ class LogViewModel extends ChangeNotifier {
     session.removeAt(index);
     notifyListeners();
     for (final s in sets) {
-      _deleteSetFromStorage(s);
+      _storage.deleteSet(s);
+      _syncDeleteFromFirestore(s);
     }
-  }
-
-  Future<void> _deleteSetFromStorage(WorkoutSet target) async {
-    final all = await _storage.loadAll();
-    all.removeWhere((s) =>
-        s.date.millisecondsSinceEpoch == target.date.millisecondsSinceEpoch &&
-        s.exercise == target.exercise);
-    await _storage.saveAll(all);
-    history = all;
-    history.sort((a, b) => b.date.compareTo(a.date));
-    localSetCount = history.length;
-    notifyListeners();
   }
 
   Future<void> _loadHistory() async {
@@ -354,6 +394,7 @@ class LogViewModel extends ChangeNotifier {
     try {
       history = await _storage.loadAll();
       history.sort((a, b) => b.date.compareTo(a.date));
+      _invalidateHistoryCache();
       localSetCount = history.length;
     } catch (e) {
       debugPrint('History load error: $e');
@@ -382,11 +423,7 @@ class LogViewModel extends ChangeNotifier {
     }
   }
 
-  /// Exports local data as CSV and POSTs it to the cloud `/train` endpoint
-  /// to retrain the XGBoost model. The on-device engine is unaffected.
-  /// Exports local data as CSV and POSTs it to the cloud `/train` endpoint
-  /// to retrain the XGBoost model. Attaches a Firebase ID token so the backend
-  /// can verify the caller's identity and subscription status.
+  /// Exports local data as CSV and POSTs to the cloud `/train` endpoint.
   Future<void> trainOnLocalData() async {
     isTraining = true;
     lastActionMessage = null;
@@ -414,6 +451,59 @@ class LogViewModel extends ChangeNotifier {
     session.clear();
     notifyListeners();
   }
+
+  // ── Firestore sync ────────────────────────────────────────────────────────
+
+  CollectionReference<Map<String, dynamic>>? _setsCollection() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return null;
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('sets');
+  }
+
+  /// Pull any sets stored in Firestore that are not yet in the local DB.
+  /// Fire-and-forget — failure is silently ignored so offline use is unaffected.
+  void _syncFromFirestore() async {
+    try {
+      final col = _setsCollection();
+      if (col == null) return;
+      final snap = await col.get();
+      if (snap.docs.isEmpty) return;
+      final remoteSets =
+          snap.docs.map((d) => WorkoutSet.fromJson(d.data())).toList();
+      await _storage.appendSets(remoteSets);
+      // Reload only if new sets were actually added.
+      final newCount = await _storage.count();
+      if (newCount != localSetCount) {
+        await _loadHistory();
+        _rebuildDict();
+        _loadTodaySession();
+        notifyListeners();
+      }
+    } catch (_) {}
+  }
+
+  void _syncSetToFirestore(WorkoutSet set) async {
+    try {
+      final col = _setsCollection();
+      if (col == null) return;
+      final id = LocalStorageService.fingerprintFor(set);
+      await col.doc(id).set(set.toJson());
+    } catch (_) {}
+  }
+
+  void _syncDeleteFromFirestore(WorkoutSet set) async {
+    try {
+      final col = _setsCollection();
+      if (col == null) return;
+      final id = LocalStorageService.fingerprintFor(set);
+      await col.doc(id).delete();
+    } catch (_) {}
+  }
+
+  // ── Utilities ─────────────────────────────────────────────────────────────
 
   static String _fmtDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';

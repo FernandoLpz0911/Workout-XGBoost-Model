@@ -1,5 +1,7 @@
-"""Workout ML — FastAPI backend serving the XGBoost recommendation model."""
+"""Workout ML — FastAPI backend serving per-user XGBoost models."""
 
+import io
+import os
 from typing import Optional
 
 import firebase_admin
@@ -10,19 +12,16 @@ from firebase_admin import auth as firebase_auth
 from firebase_admin import firestore as admin_firestore
 from fastapi import Depends, FastAPI, Header, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
+from google.cloud import storage as gcs
 from pydantic import BaseModel
 
 from pipeline import run_pipeline
 
 app = FastAPI(title="Workout ML API")
 
-# Initialise Firebase Admin using Application Default Credentials.
-# On Cloud Run the service account is picked up automatically.
 if not firebase_admin._apps:
     firebase_admin.initialize_app()
 
-# CORS: native mobile clients are not subject to browser CORS restrictions.
-# Security is enforced entirely via Firebase token validation.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -31,23 +30,80 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# GCS bucket that stores per-user model artifacts.
+# Create this bucket in your project before deploying:
+#   gsutil mb gs://<your-bucket-name>
+# Set the env var GCS_BUCKET on your Cloud Run service to match.
+_GCS_BUCKET = os.getenv("GCS_BUCKET", "workout-ml-user-models")
 
-def _load_assets():
-    try:
-        return (
-            joblib.load("xgb_model.joblib"),
-            joblib.load("feature_cols.joblib"),
-            pd.read_csv("Processed_Workout_Data.csv", parse_dates=["Date"]),
+# In-memory cache: uid → (model, feature_cols, workout_summary).
+# Each Cloud Run instance caches independently; a cache miss just reloads
+# from GCS, which is the same cost as the old global load.
+_model_cache: dict[str, tuple] = {}
+
+_gcs_client = gcs.Client()
+
+
+def _gcs_prefix(uid: str) -> str:
+    return f"user_models/{uid}"
+
+
+def _save_user_model(
+    uid: str, model, feature_cols: list, summary: pd.DataFrame
+):
+    """Serialize and upload all three artifacts to GCS."""
+    bucket = _gcs_client.bucket(_GCS_BUCKET)
+    prefix = _gcs_prefix(uid)
+
+    for name, obj in [
+        ("xgb_model.joblib", model),
+        ("feature_cols.joblib", feature_cols),
+    ]:
+        buf = io.BytesIO()
+        joblib.dump(obj, buf)
+        buf.seek(0)
+        bucket.blob(f"{prefix}/{name}").upload_from_file(
+            buf, content_type="application/octet-stream"
         )
-    except Exception as e:  # noqa: BLE001
-        print(f"WARNING: Could not load assets: {e}")
-        return None, None, None
+
+    csv_buf = io.BytesIO(summary.to_csv(index=False).encode())
+    bucket.blob(f"{prefix}/workout_summary.csv").upload_from_file(
+        csv_buf, content_type="text/csv"
+    )
+
+    _model_cache[uid] = (model, feature_cols, summary)
 
 
-model, feature_cols, workout_summary = _load_assets()
+def _load_user_model(uid: str) -> tuple | None:
+    """Load from cache or GCS. None if no model exists for this user."""
+    if uid in _model_cache:
+        return _model_cache[uid]
+
+    try:
+        bucket = _gcs_client.bucket(_GCS_BUCKET)
+        prefix = _gcs_prefix(uid)
+
+        model_buf = io.BytesIO(
+            bucket.blob(f"{prefix}/xgb_model.joblib").download_as_bytes()
+        )
+        cols_buf = io.BytesIO(
+            bucket.blob(f"{prefix}/feature_cols.joblib").download_as_bytes()
+        )
+        csv_bytes = bucket.blob(
+            f"{prefix}/workout_summary.csv"
+        ).download_as_bytes()
+
+        model = joblib.load(model_buf)
+        feature_cols = joblib.load(cols_buf)
+        summary = pd.read_csv(io.BytesIO(csv_bytes), parse_dates=["Date"])
+
+        _model_cache[uid] = (model, feature_cols, summary)
+        return _model_cache[uid]
+    except Exception:
+        return None
 
 
-# ── Auth dependencies ──────────────────────────────────────────────────────────
+# ── Auth dependencies ────────────────────────────────────────────────────────
 
 
 def get_uid(authorization: Optional[str] = Header(None)) -> str:
@@ -81,7 +137,7 @@ def require_premium(uid: str = Depends(get_uid)) -> str:
     return uid
 
 
-# ── Endpoints ──────────────────────────────────────────────────────────────────
+# ── Endpoints ────────────────────────────────────────────────────────────────
 
 
 @app.post("/train")
@@ -89,15 +145,14 @@ async def train_model(
     file: UploadFile = File(...),
     uid: str = Depends(require_premium),
 ):
-    """Retrain the XGBoost model with an uploaded FitNotes CSV (premium only)."""
+    """Retrain the user's XGBoost model from an uploaded FitNotes CSV."""
     if not file.filename.endswith(".csv"):
         raise HTTPException(
             status_code=400, detail="Only CSV files are allowed."
         )
     try:
-        run_pipeline(file.file)
-        global model, feature_cols, workout_summary  # noqa: PLW0603
-        model, feature_cols, workout_summary = _load_assets()
+        model, feature_cols, summary = run_pipeline(file.file)
+        _save_user_model(uid, model, feature_cols, summary)
         return {"message": "Model successfully trained and updated!"}
     except Exception as exc:
         raise HTTPException(
@@ -106,11 +161,18 @@ async def train_model(
 
 
 @app.get("/exercises")
-def get_exercises():
-    """Return all known exercises grouped by category (public endpoint)."""
+def get_exercises(uid: str = Depends(get_uid)):
+    """Return all exercises the user has trained on, grouped by category."""
+    assets = _load_user_model(uid)
+    if assets is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No trained model found. Upload a CSV via /train first.",
+        )
+    _, _, summary = assets
     try:
         return (
-            workout_summary
+            summary
             .groupby("Category")["Exercise"]
             .unique()
             .apply(list)
@@ -128,7 +190,7 @@ class WorkoutRequest(BaseModel):
 
 
 def _get_weight(one_rm: float, reps: int) -> float:
-    """Invert the Epley formula to get a working weight for a target rep count."""
+    """Invert Epley formula: working weight for a target rep count."""
     return one_rm / (1 + 0.0333 * reps)
 
 
@@ -137,7 +199,17 @@ def get_recommendation(
     req: WorkoutRequest,
     uid: str = Depends(get_uid),
 ):
-    """Return an AI recommendation for the requested exercise (auth required)."""
+    """Return AI recommendation for the requested exercise (auth required)."""
+    assets = _load_user_model(uid)
+    if assets is None:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "No trained model found. Upload a CSV via /train first."
+            ),
+        )
+    model, feature_cols, workout_summary = assets
+
     ex_data = workout_summary[workout_summary["Exercise"] == req.exercise]
     if ex_data.empty:
         raise HTTPException(
@@ -161,6 +233,13 @@ def get_recommendation(
         rm_momentum = float(recent_1rms[-1] - recent_1rms[-2])
     else:
         rm_momentum = 0.0
+
+    # Plateau detection: 4 sessions with no 1RM gain >= 2.5 lbs.
+    recent_4 = ex_data.tail(4)["Session_Max_1RM"].values
+    plateau = (
+        len(recent_4) >= 4
+        and (recent_4.max() - recent_4[0]) < 2.5
+    )
 
     sim = pd.DataFrame({col: [0.0] for col in feature_cols})
     sim.at[0, "Days_Since_Last"] = last_days
@@ -192,6 +271,12 @@ def get_recommendation(
         target_w = last_w
         target_r = 8
         base_status = "FORM FOCUS: Repeat weight to nail technique"
+    elif plateau:
+        target_w = round(last_w * 0.6 / 2.5) * 2.5
+        target_r = 15
+        base_status = (
+            "DELOAD: Plateau detected — back off to rebuild work capacity"
+        )
     elif last_reps >= 10:
         target_w = last_w + 2.5
         target_r = 8
@@ -212,9 +297,11 @@ def get_recommendation(
         required_1rm = float(target_w * (1 + 0.0333 * target_r))
     else:
         required_1rm = float(target_w * (1 + 0.0333 * target_r))
-        if pred_1rm < required_1rm * threshold:
+        if not plateau and pred_1rm < required_1rm * threshold:
             target_w = round(_get_weight(pred_1rm, target_r) / 2.5) * 2.5
-            status = "AI OVERRIDE: Fatigue detected - weight adjusted for safety"
+            status = (
+                "AI OVERRIDE: Fatigue detected - weight adjusted for safety"
+            )
         else:
             status = base_status
 
@@ -223,6 +310,11 @@ def get_recommendation(
         insights.append(
             "Form issues were logged last session"
             " - prioritize technique over load today."
+        )
+    if plateau:
+        insights.append(
+            "No 1RM gain across the last 4 sessions."
+            " Deload at 60% load with higher reps to rebuild capacity."
         )
     if had_fatigue:
         insights.append(
@@ -236,7 +328,7 @@ def get_recommendation(
         )
     elif rm_momentum > 5:
         insights.append(
-            "Strong momentum - your 1RM has been climbing consistently. Keep it up."
+            "Strong momentum - your 1RM has been climbing consistently!"
         )
 
     return {

@@ -1,52 +1,130 @@
 import 'dart:convert';
 import 'dart:typed_data';
+
+import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite/sqflite.dart';
+
 import 'package:repiq/models/workout_set.dart';
 
-/// Persists all local workout data using [SharedPreferences].
+/// Persists all local workout data in a SQLite database.
 ///
-/// Responsible for three things:
-/// 1. Reading and writing [WorkoutSet] entries (key `workout_sets_v1`).
-/// 2. Importing FitNotes-compatible CSV exports with duplicate detection.
-/// 3. Reading and writing per-exercise [TrainingMode] preferences (key `training_modes_v1`).
+/// Sets are keyed by a deterministic [fingerprintFor] so duplicate imports are
+/// silently ignored. Training mode preferences stay in SharedPreferences (they
+/// are a tiny map and don't benefit from SQL).
+///
+/// Migration: on the first open after upgrading from the SharedPreferences-only
+/// version, all existing sets are moved into SQLite and the old prefs key is
+/// removed.
 class LocalStorageService {
-  static const _setsKey = 'workout_sets_v1';
   static const _modesKey = 'training_modes_v1';
+  static const _migratedKey = 'sqflite_migrated_v1';
 
-  /// Loads all stored sets. Returns an empty list if nothing has been saved yet.
+  Database? _db;
+
+  Future<Database> get _database async {
+    _db ??= await _openDb();
+    return _db!;
+  }
+
+  Future<Database> _openDb() async {
+    final path = join(await getDatabasesPath(), 'repiq.db');
+    return openDatabase(
+      path,
+      version: 1,
+      onCreate: (db, _) => db.execute('''
+        CREATE TABLE sets (
+          fingerprint   TEXT PRIMARY KEY,
+          date_iso      TEXT NOT NULL,
+          exercise      TEXT NOT NULL,
+          category      TEXT NOT NULL,
+          weight        REAL NOT NULL DEFAULT 0.0,
+          reps          INTEGER NOT NULL DEFAULT 0,
+          distance      REAL,
+          distance_unit TEXT,
+          duration      TEXT,
+          comment       TEXT NOT NULL DEFAULT ""
+        )
+      '''),
+    );
+  }
+
+  /// One-time migration from the SharedPreferences JSON blob.
+  Future<void> _migrateIfNeeded() async {
+    final prefs = await SharedPreferences.getInstance();
+    if (prefs.getBool(_migratedKey) == true) return;
+
+    final raw = prefs.getString('workout_sets_v1');
+    if (raw != null && raw.isNotEmpty) {
+      final list = jsonDecode(raw) as List<dynamic>;
+      final sets = list
+          .map((e) => WorkoutSet.fromJson(e as Map<String, dynamic>))
+          .toList();
+      if (sets.isNotEmpty) await appendSets(sets);
+      await prefs.remove('workout_sets_v1');
+    }
+    await prefs.setBool(_migratedKey, true);
+  }
+
   Future<List<WorkoutSet>> loadAll() async {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_setsKey);
-    if (raw == null || raw.isEmpty) return [];
-    final list = jsonDecode(raw) as List<dynamic>;
-    return list
-        .map((e) => WorkoutSet.fromJson(e as Map<String, dynamic>))
-        .toList();
+    await _migrateIfNeeded();
+    final db = await _database;
+    final rows = await db.query('sets', orderBy: 'date_iso ASC');
+    return rows.map(_rowToSet).toList();
   }
 
-  /// Overwrites the entire set list in storage.
+  /// Replaces every row. Used only during CSV import merge.
   Future<void> saveAll(List<WorkoutSet> sets) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(
-        _setsKey, jsonEncode(sets.map((s) => s.toJson()).toList()));
+    final db = await _database;
+    await db.transaction((txn) async {
+      await txn.delete('sets');
+      for (final s in sets) {
+        await txn.insert('sets', _setToRow(s),
+            conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+    });
   }
 
-  /// Appends [newSets] to the existing stored list.
+  /// Inserts new sets, silently skipping any duplicates.
   Future<void> appendSets(List<WorkoutSet> newSets) async {
-    final existing = await loadAll();
-    await saveAll([...existing, ...newSets]);
+    final db = await _database;
+    final batch = db.batch();
+    for (final s in newSets) {
+      batch.insert('sets', _setToRow(s),
+          conflictAlgorithm: ConflictAlgorithm.ignore);
+    }
+    await batch.commit(noResult: true);
   }
 
-  Future<int> count() async => (await loadAll()).length;
+  Future<int> count() async {
+    final db = await _database;
+    final result = await db.rawQuery('SELECT COUNT(*) AS cnt FROM sets');
+    return Sqflite.firstIntValue(result) ?? 0;
+  }
 
-  /// Removes all stored sets. Cannot be undone.
   Future<void> clear() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_setsKey);
+    final db = await _database;
+    await db.delete('sets');
   }
 
-  /// Returns all stored sets encoded as a FitNotes-compatible CSV byte array,
-  /// ready to POST to the `/train` endpoint for cloud model retraining.
+  /// O(1) delete using the fingerprint primary key.
+  Future<void> deleteSet(WorkoutSet target) async {
+    final db = await _database;
+    await db.delete('sets',
+        where: 'fingerprint = ?', whereArgs: [fingerprintFor(target)]);
+  }
+
+  /// O(1) update: delete old row by fingerprint, insert updated row.
+  Future<void> updateSet(WorkoutSet old, WorkoutSet updated) async {
+    final db = await _database;
+    await db.transaction((txn) async {
+      await txn.delete('sets',
+          where: 'fingerprint = ?', whereArgs: [fingerprintFor(old)]);
+      await txn.insert('sets', _setToRow(updated),
+          conflictAlgorithm: ConflictAlgorithm.replace);
+    });
+  }
+
   Future<Uint8List> exportAsCsvBytes() async {
     final sets = await loadAll();
     const header =
@@ -55,17 +133,11 @@ class LocalStorageService {
     return const Utf8Encoder().convert('$header\n$rows\n');
   }
 
-  /// Parses a FitNotes CSV export and merges only new rows into local storage.
-  ///
-  /// Duplicate detection uses a fingerprint of date (day granularity) plus all
-  /// data fields, so re-importing the same file is safe.
+  /// Parses a FitNotes CSV and inserts only rows not already in the database.
   /// Returns the number of new sets added.
   Future<int> importFromCsvText(String csvText) async {
     final lines = csvText.replaceAll('\r\n', '\n').split('\n');
     if (lines.length < 2) return 0;
-
-    final existing = await loadAll();
-    final seen = existing.map(_fingerprint).toSet();
 
     final newSets = <WorkoutSet>[];
     for (final line in lines.skip(1)) {
@@ -74,8 +146,6 @@ class LocalStorageService {
         final p = _parseCsvLine(line);
         if (p.length < 6) continue;
 
-        // FitNotes columns: Date, Exercise, Category, Weight, WeightUnit,
-        //                   Reps, Distance, DistanceUnit, Time, Comment
         final weight = double.tryParse(p[3].trim()) ?? 0.0;
         final reps = int.tryParse(p[5].trim()) ?? 0;
         final distance =
@@ -91,7 +161,7 @@ class LocalStorageService {
         final hasDuration = duration != null;
         if (!hasStrength && !hasCardio && !hasDuration) continue;
 
-        final set = WorkoutSet(
+        newSets.add(WorkoutSet(
           date: DateTime.parse(p[0].trim()),
           exercise: p[1].trim(),
           category: p[2].trim(),
@@ -101,24 +171,19 @@ class LocalStorageService {
           distanceUnit: distanceUnit,
           duration: duration,
           comment: comment,
-        );
-
-        if (seen.add(_fingerprint(set))) {
-          newSets.add(set);
-        }
+        ));
       } catch (_) {
         continue;
       }
     }
-    if (newSets.isNotEmpty) await saveAll([...existing, ...newSets]);
-    return newSets.length;
+    if (newSets.isEmpty) return 0;
+
+    final before = await count();
+    await appendSets(newSets);
+    final after = await count();
+    return after - before;
   }
 
-  /// Loads the saved training mode for each exercise.
-  ///
-  /// Returns a map of exercise name → `"hypertrophy"` or `"strength"`.
-  /// Exercises that have never been assigned a mode are absent from the map
-  /// and default to hypertrophy in the view model.
   Future<Map<String, String>> loadTrainingModes() async {
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_modesKey);
@@ -126,17 +191,16 @@ class LocalStorageService {
     return (jsonDecode(raw) as Map<String, dynamic>).cast<String, String>();
   }
 
-  /// Persists the training mode map returned by [loadTrainingModes].
   Future<void> saveTrainingModes(Map<String, String> modes) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_modesKey, jsonEncode(modes));
   }
 
-  /// Day-level fingerprint for duplicate detection.
-  ///
-  /// FitNotes exports dates without time, so millisecond precision would
-  /// cause every reimport to look like new data.
-  static String _fingerprint(WorkoutSet s) {
+  // ── Helpers ──────────────────────────────────────────────────────────────────
+
+  /// Day-level fingerprint used as PRIMARY KEY — stable across CSV re-imports.
+  /// Public so LogViewModel can derive Firestore doc IDs from it.
+  static String fingerprintFor(WorkoutSet s) {
     final d = s.date;
     final day =
         '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
@@ -144,8 +208,31 @@ class LocalStorageService {
         '|${s.distance}|${s.distanceUnit}|${s.duration}|${s.comment}';
   }
 
-  /// Splits a single CSV line into fields, correctly handling quoted fields
-  /// that may contain commas or escaped double-quotes.
+  static Map<String, dynamic> _setToRow(WorkoutSet s) => {
+        'fingerprint': fingerprintFor(s),
+        'date_iso': s.date.toIso8601String(),
+        'exercise': s.exercise,
+        'category': s.category,
+        'weight': s.weight,
+        'reps': s.reps,
+        'distance': s.distance,
+        'distance_unit': s.distanceUnit,
+        'duration': s.duration,
+        'comment': s.comment,
+      };
+
+  static WorkoutSet _rowToSet(Map<String, dynamic> row) => WorkoutSet(
+        date: DateTime.parse(row['date_iso'] as String),
+        exercise: row['exercise'] as String,
+        category: row['category'] as String,
+        weight: (row['weight'] as num).toDouble(),
+        reps: row['reps'] as int,
+        distance: (row['distance'] as num?)?.toDouble(),
+        distanceUnit: row['distance_unit'] as String?,
+        duration: row['duration'] as String?,
+        comment: row['comment'] as String? ?? '',
+      );
+
   static List<String> _parseCsvLine(String line) {
     final result = <String>[];
     var inQuotes = false;

@@ -3,6 +3,10 @@
 .gitignore
 node_modules
 venv
+workout_ai_env
+app
 .env
 __pycache__
 *.pyc
+*.joblib
+*.csv

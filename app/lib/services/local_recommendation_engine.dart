@@ -66,6 +66,15 @@ class LocalRecommendationEngine {
   static bool _isDropSet(String c) => c.contains(_dropSetRe);
   static bool _isWarmup(String c) => c.contains(_warmupRe);
 
+  /// True when the last 4 sessions show no 1RM gain >= 2.5 lbs — indicates a
+  /// true plateau rather than normal fluctuation.
+  static bool _isPlateaued(List<List<WorkoutSet>> sessions) {
+    final rms = sessions
+        .map((s) => s.map((w) => calcOneRM(w.weight, w.reps)).reduce(max))
+        .toList();
+    return rms.reduce(max) - rms.first < 2.5;
+  }
+
   static List<List<WorkoutSet>> _groupBySessions(List<WorkoutSet> sets) {
     final map = <String, List<WorkoutSet>>{};
     for (final s in sets) {
@@ -173,10 +182,17 @@ class LocalRecommendationEngine {
     int targetReps;
     String baseStatus;
 
+    final plateauDetected = workingSessions.length >= 4 &&
+        _isPlateaued(workingSessions.sublist(workingSessions.length - 4));
+
     if (hadFormIssue) {
       targetWeight = lastMaxW;
       targetReps = defaultReps;
       baseStatus = 'FORM FOCUS: Repeat weight to nail technique';
+    } else if (plateauDetected) {
+      targetWeight = ((lastMaxW * 0.6) / 2.5).round() * 2.5;
+      targetReps = 15;
+      baseStatus = 'DELOAD: Plateau detected — back off to rebuild work capacity';
     } else if (lastAvgReps >= graduationReps) {
       targetWeight = lastMaxW + weightIncrement;
       targetReps = defaultReps;
@@ -227,6 +243,10 @@ class LocalRecommendationEngine {
     if (hadFormIssue) {
       insights.add(
           'Form issues were logged last session — prioritize technique over load today.');
+    }
+    if (plateauDetected) {
+      insights.add(
+          'No 1RM gain across the last 4 sessions. Deload at 60% load with higher reps to rebuild capacity and break through.');
     }
     if (hadFatigue) {
       insights.add(
