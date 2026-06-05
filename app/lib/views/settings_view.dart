@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart' show launchUrl, LaunchMode;
+import 'package:repiq/views/legal_view.dart';
 import 'package:repiq/viewmodels/auth_viewmodel.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/viewmodels/subscription_viewmodel.dart';
@@ -138,6 +139,30 @@ class SettingsView extends StatelessWidget {
             ),
           ),
         ],
+
+        const SizedBox(height: 24),
+        _SectionHeader('Legal'),
+        Card(
+          child: Column(
+            children: [
+              ListTile(
+                leading: const Icon(Icons.privacy_tip_outlined,
+                    color: Colors.blueAccent),
+                title: const Text('Privacy Policy'),
+                trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                onTap: () => LegalView.showPrivacy(context),
+              ),
+              const Divider(height: 1, indent: 16),
+              ListTile(
+                leading: const Icon(Icons.gavel_outlined,
+                    color: Colors.blueAccent),
+                title: const Text('Terms of Service'),
+                trailing: const Icon(Icons.chevron_right, color: Colors.grey),
+                onTap: () => LegalView.showTerms(context),
+              ),
+            ],
+          ),
+        ),
 
         const SizedBox(height: 24),
         _SectionHeader('Danger Zone'),

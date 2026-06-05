@@ -2,12 +2,13 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/analytics_service.dart';
 import 'package:repiq/services/api_service.dart';
 import 'package:repiq/services/local_recommendation_engine.dart';
 import 'package:repiq/services/local_storage_service.dart';
+import 'package:repiq/services/notification_service.dart';
 
 export '../models/recommendation_models.dart' show TrainingMode;
 
@@ -59,6 +60,10 @@ class SessionExercise {
   /// The AI-generated recommendation for this session. Null until computed,
   /// or for non-strength exercises.
   Recommendation? recommendation;
+
+  /// Cloud XGBoost recommendation — non-null for premium users who have trained
+  /// a model. Overwrites [recommendation] in the UI when available.
+  Recommendation? cloudRecommendation;
 
   /// Non-null when recommendation computation failed.
   String? recError;
@@ -197,6 +202,26 @@ class LogViewModel extends ChangeNotifier {
     return <String>{...fromHistory, ...presets}.toList()..sort();
   }
 
+  /// Consecutive calendar days with at least one set logged, ending today or
+  /// yesterday (yesterday counts so a streak isn't broken before the gym opens).
+  int get currentStreak {
+    if (history.isEmpty) return 0;
+    final today = DateTime.now();
+    final loggedDays =
+        history.map((s) => _fmtDate(s.date)).toSet();
+
+    var check = DateTime(today.year, today.month, today.day);
+    if (!loggedDays.contains(_fmtDate(check))) {
+      check = check.subtract(const Duration(days: 1));
+    }
+    int streak = 0;
+    while (loggedDays.contains(_fmtDate(check))) {
+      streak++;
+      check = check.subtract(const Duration(days: 1));
+    }
+    return streak;
+  }
+
   /// History grouped by date string (`"YYYY-MM-DD"`), sorted newest-first.
   /// Result is cached and only rebuilt when history actually changes.
   Map<String, List<WorkoutSet>> get historyByDate {
@@ -275,8 +300,8 @@ class LogViewModel extends ChangeNotifier {
     }
   }
 
-  /// Kicks off recommendation computation in a background isolate.
-  /// Updates [ex] and calls [notifyListeners] when the result arrives.
+  /// Kicks off recommendation computation in a background isolate, then chains
+  /// a cloud XGBoost attempt for premium users.
   void _applyRec(SessionExercise ex) {
     if (exerciseTypeOf(ex.category) == ExerciseType.strength) {
       final params = _RecParams(
@@ -291,6 +316,7 @@ class LogViewModel extends ChangeNotifier {
       compute(_computeRec, params).then((rec) {
         ex.recommendation = rec;
         notifyListeners();
+        _tryCloudRec(ex);
       }).catchError((_) {
         ex.recError = 'Could not compute recommendation.';
         notifyListeners();
@@ -298,6 +324,21 @@ class LogViewModel extends ChangeNotifier {
     } else {
       ex.lastSessionSummary = _lastSessionSummary(ex.exercise, ex.category);
     }
+  }
+
+  /// Attempts to fetch a cloud XGBoost recommendation. Silently no-ops on
+  /// 403 (free tier) and 404 (model not trained yet).
+  void _tryCloudRec(SessionExercise ex) async {
+    try {
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token == null) return;
+      final cloud = await _api.getRecommendation(
+          ex.exercise, ex.category, authToken: token);
+      if (cloud != null) {
+        ex.cloudRecommendation = cloud;
+        notifyListeners();
+      }
+    } catch (_) {}
   }
 
   String _lastSessionSummary(String exercise, String category) {
@@ -311,7 +352,7 @@ class LogViewModel extends ChangeNotifier {
         sets.where((s) => _fmtDate(s.date) == lastDate).toList();
     if (exerciseTypeOf(category) == ExerciseType.cardio) {
       final totalDist =
-          lastSets.fold(0.0, (sum, s) => sum + (s.distance ?? 0.0));
+          lastSets.fold(0.0, (acc, s) => acc + (s.distance ?? 0.0));
       final unit = lastSets.first.distanceUnit ?? 'mi';
       return '${lastSets.length} lap${lastSets.length == 1 ? '' : 's'} · '
           '${totalDist.toStringAsFixed(2)} $unit';
@@ -334,10 +375,13 @@ class LogViewModel extends ChangeNotifier {
     );
     _applyRec(ex);
     session.add(ex);
+    if (session.length == 1) AnalyticsService.logSessionStarted();
+    AnalyticsService.logExerciseAdded(exercise);
     notifyListeners();
   }
 
-  /// Appends [set] to the session, persists it, and syncs to Firestore.
+  /// Appends [set] to the session, persists it, syncs to Firestore, and
+  /// reschedules the 3-day workout reminder notification.
   void logSet(int exerciseIndex, WorkoutSet set) {
     session[exerciseIndex].sets.add(set);
     history.insert(0, set);
@@ -346,6 +390,16 @@ class LogViewModel extends ChangeNotifier {
     notifyListeners();
     _storage.appendSets([set]);
     _syncSetToFirestore(set);
+    AnalyticsService.logSetLogged(set.exercise);
+    NotificationService.scheduleWorkoutReminder();
+    _maybeLogStreakMilestone();
+  }
+
+  void _maybeLogStreakMilestone() {
+    final s = currentStreak;
+    if (s == 3 || s == 7 || s == 14 || s == 30) {
+      AnalyticsService.logStreakMilestone(s);
+    }
   }
 
   /// Removes the set at [setIndex] from the session and from storage.
@@ -414,6 +468,7 @@ class LogViewModel extends ChangeNotifier {
       await _loadHistory();
       _rebuildDict();
       _loadTodaySession();
+      AnalyticsService.logCsvImported(count);
       lastActionMessage = 'Imported $count sets from CSV.';
     } catch (e) {
       lastActionMessage = 'Import failed: $e';
@@ -432,6 +487,7 @@ class LogViewModel extends ChangeNotifier {
       final bytes = await _storage.exportAsCsvBytes();
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
       await _api.trainFromCsvBytes(bytes, authToken: token);
+      AnalyticsService.logCloudRetrain();
       lastActionMessage =
           'Cloud model retrained on $localSetCount sets. '
           'Local recommendations already use all your data automatically.';

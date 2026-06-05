@@ -1,25 +1,28 @@
+import 'dart:convert';
 import 'dart:typed_data';
+
 import 'package:http/http.dart' as http;
+import 'package:repiq/models/recommendation_models.dart';
 
 /// HTTP client for the cloud FastAPI backend deployed on Google Cloud Run.
 ///
-/// All endpoints that rely on the XGBoost model require this service.
 /// The on-device [LocalRecommendationEngine] works independently without any
-/// network access.
+/// network access. This service is used for cloud model retraining (premium)
+/// and for fetching XGBoost-powered recommendations (premium, model must exist).
 class ApiService {
-  static const String baseUrl =
+  static const String _base =
       'https://workoutmodel-296813230971.us-central1.run.app';
 
-  /// Uploads [csvBytes] to the cloud `/train` endpoint to retrain the XGBoost
-  /// model with the latest local data.
-  ///
-  /// [authToken] is the Firebase ID token obtained from [AuthViewModel.getIdToken].
-  /// The backend validates this token and verifies the user's subscription before
-  /// allowing retraining.
+  Map<String, String> _authHeader(String? token) => token != null
+      ? {'Authorization': 'Bearer $token'}
+      : {};
+
+  /// Uploads [csvBytes] to `/train` to retrain the user's personal XGBoost
+  /// model. Requires a valid premium Firebase ID token.
   Future<void> trainFromCsvBytes(Uint8List csvBytes,
       {String? authToken}) async {
     final request =
-        http.MultipartRequest('POST', Uri.parse('$baseUrl/train'));
+        http.MultipartRequest('POST', Uri.parse('$_base/train'));
     if (authToken != null) {
       request.headers['Authorization'] = 'Bearer $authToken';
     }
@@ -28,16 +31,49 @@ class ApiService {
       csvBytes,
       filename: 'workout_data.csv',
     ));
-    final streamed = await request.send().timeout(const Duration(seconds: 30));
+    final streamed =
+        await request.send().timeout(const Duration(seconds: 30));
     if (streamed.statusCode != 200) {
       final body = await streamed.stream.bytesToString();
       if (streamed.statusCode == 401) {
         throw Exception('Authentication required. Please sign in.');
       }
       if (streamed.statusCode == 403) {
-        throw Exception('Premium subscription required to retrain the model.');
+        throw Exception(
+            'Premium subscription required to retrain the model.');
       }
       throw Exception('Training failed: $body');
     }
+  }
+
+  /// Fetches a cloud XGBoost recommendation for [exercise] / [category].
+  ///
+  /// Returns null on 404 (no model trained yet) or 403 (not premium).
+  /// Throws on network errors so the caller can surface offline state.
+  Future<Recommendation?> getRecommendation(
+    String exercise,
+    String category, {
+    String? authToken,
+  }) async {
+    final response = await http
+        .post(
+          Uri.parse('$_base/recommend'),
+          headers: {
+            'Content-Type': 'application/json',
+            ..._authHeader(authToken),
+          },
+          body: jsonEncode({'exercise': exercise, 'category': category}),
+        )
+        .timeout(const Duration(seconds: 10));
+
+    if (response.statusCode == 200) {
+      return Recommendation.fromJson(
+          jsonDecode(response.body) as Map<String, dynamic>);
+    }
+    // 403 = not premium, 404 = no model for this user — both are silent fallbacks.
+    if (response.statusCode == 403 || response.statusCode == 404) {
+      return null;
+    }
+    throw Exception('Cloud recommend failed (${response.statusCode})');
   }
 }
