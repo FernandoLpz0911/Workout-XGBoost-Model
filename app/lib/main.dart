@@ -124,13 +124,27 @@ class _AppRoot extends StatefulWidget {
 }
 
 class _AppRootState extends State<_AppRoot> {
+  SubscriptionViewModel? _sub;
+  VoidCallback? _subListener;
+
   @override
   void initState() {
     super.initState();
-    // Runs after the first frame so the context has all providers available.
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      context.read<SubscriptionViewModel>().initialize();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      _sub = context.read<SubscriptionViewModel>();
+      final vm = context.read<LogViewModel>();
+      _subListener = () => vm.updatePremiumStatus(_sub!.isPremium);
+      _sub!.addListener(_subListener!);
+      await _sub!.initialize();
+      if (mounted) vm.updatePremiumStatus(_sub!.isPremium);
     });
+  }
+
+  @override
+  void dispose() {
+    if (_subListener != null) _sub?.removeListener(_subListener!);
+    super.dispose();
   }
 
   @override
