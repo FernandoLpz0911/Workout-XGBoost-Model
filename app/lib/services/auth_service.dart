@@ -52,6 +52,7 @@ class AuthService {
         'subscriptionStatus': 'none',
         'subscriptionPlan': null,
         'subscriptionExpiry': null,
+        'isLifetimePremium': false,
       });
     }
   }

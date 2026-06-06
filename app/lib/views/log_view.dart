@@ -588,7 +588,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
       children: [
         DropdownButtonFormField<String>(
           decoration: const InputDecoration(labelText: 'Category'),
-          initialValue: _category,
+          value: _category,
           items: categories
               .map((c) => DropdownMenuItem(value: c, child: Text(c)))
               .toList(),
@@ -601,7 +601,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
         const SizedBox(height: 12),
         DropdownButtonFormField<String>(
           decoration: const InputDecoration(labelText: 'Exercise'),
-          initialValue: _exercise,
+          value: _exercise,
           items: exercises
               .map((e) => DropdownMenuItem(value: e, child: Text(e)))
               .toList(),

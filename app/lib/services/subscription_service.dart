@@ -78,6 +78,7 @@ class SubscriptionService {
     final snap = await _firestore.collection('users').doc(uid).get();
     if (!snap.exists) return false;
     final data = snap.data()!;
+    if (data['isLifetimePremium'] == true) return true;
     if (data['subscriptionStatus'] != 'active') return false;
     final expiry = data['subscriptionExpiry'];
     if (expiry is Timestamp) {
