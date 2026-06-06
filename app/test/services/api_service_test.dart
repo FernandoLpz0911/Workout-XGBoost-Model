@@ -160,4 +160,35 @@ void main() {
       );
     });
   });
+
+  group('ApiService.deleteUserData', () {
+    test('200 completes without throwing', () async {
+      final api = _serviceWith((_) => http.Response('{"message":"ok"}', 200));
+      await expectLater(
+        api.deleteUserData(authToken: 'token'),
+        completes,
+      );
+    });
+
+    test('non-200 throws with status code', () async {
+      final api = _serviceWith((_) => http.Response('error', 500));
+      expect(
+        () => api.deleteUserData(authToken: 'token'),
+        throwsA(predicate<Exception>(
+            (e) => e.toString().contains('500'))),
+      );
+    });
+
+    test('sends auth header', () async {
+      String? capturedAuth;
+      final api = ApiService(
+        client: MockClient((req) async {
+          capturedAuth = req.headers['Authorization'];
+          return http.Response('{"message":"ok"}', 200);
+        }),
+      );
+      await api.deleteUserData(authToken: 'my_token');
+      expect(capturedAuth, 'Bearer my_token');
+    });
+  });
 }

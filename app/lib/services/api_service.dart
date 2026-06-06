@@ -53,6 +53,27 @@ class ApiService {
     }
   }
 
+  /// Deletes all cloud data for the authenticated user.
+  ///
+  /// The backend removes GCS model artifacts, Firestore documents, and the
+  /// Firebase Auth account. Callers should sign out and clear local storage
+  /// after this completes.
+  Future<void> deleteUserData({String? authToken}) async {
+    final response = await _client
+        .delete(
+          Uri.parse('$_base/delete-user-data'),
+          headers: {
+            'Content-Type': 'application/json',
+            ..._authHeader(authToken),
+          },
+        )
+        .timeout(const Duration(seconds: 30));
+    if (response.statusCode != 200) {
+      throw Exception(
+          'Account deletion failed (${response.statusCode})');
+    }
+  }
+
   /// Fetches a cloud XGBoost recommendation for [exercise] / [category].
   ///
   /// Returns null on 404 (no model trained yet) or 403 (not premium).
