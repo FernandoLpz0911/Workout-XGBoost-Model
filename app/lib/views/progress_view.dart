@@ -62,7 +62,7 @@ class _ProgressViewState extends State<ProgressView> {
               ),
               const SizedBox(height: 24),
               ElevatedButton.icon(
-                onPressed: () => PaywallView.show(context),
+                onPressed: () => PaywallView.show(context, source: 'progress'),
                 icon: const Icon(Icons.star),
                 label: const Text('Upgrade to Premium'),
                 style: ElevatedButton.styleFrom(

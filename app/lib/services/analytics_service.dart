@@ -15,9 +15,6 @@ class AnalyticsService {
   static Future<void> logSessionStarted() =>
       _a.logEvent(name: 'session_started');
 
-  static Future<void> logSessionCompleted(int totalSets) =>
-      _a.logEvent(name: 'session_completed', parameters: {'sets': totalSets});
-
   static Future<void> logCsvImported(int count) =>
       _a.logEvent(name: 'csv_imported', parameters: {'sets': count});
 

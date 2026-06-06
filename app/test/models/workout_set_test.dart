@@ -106,7 +106,7 @@ void main() {
         comment: 'good set',
       );
       final row = set.toCsvRow();
-      expect(row, startsWith('2026-03-05,Bench Press,Chest,135.0,lbs,8'));
+      expect(row, startsWith('2026-03-05,"Bench Press","Chest",135.0,lbs,8'));
       expect(row, contains('"good set"'));
     });
 

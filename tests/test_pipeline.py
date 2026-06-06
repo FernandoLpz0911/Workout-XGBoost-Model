@@ -5,10 +5,15 @@ import io
 import numpy as np
 import pytest
 
-from pipeline import STRENGTH_CATEGORIES, _tag_comment, calculate_hybrid_1rm, run_pipeline
+from pipeline import (
+    STRENGTH_CATEGORIES,
+    _tag_comment,
+    calculate_hybrid_1rm,
+    run_pipeline,
+)
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
+# ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _csv(*rows: str) -> io.BytesIO:
     """Build an in-memory CSV file with a FitNotes-compatible header."""
@@ -17,6 +22,13 @@ def _csv(*rows: str) -> io.BytesIO:
 
 
 BENCH_ROWS = [
+    "2025-09-10,Bench Press,Chest,90,8,",
+    "2025-09-17,Bench Press,Chest,92,8,",
+    "2025-09-24,Bench Press,Chest,95,8,",
+    "2025-10-01,Bench Press,Chest,97,8,",
+    "2025-10-08,Bench Press,Chest,100,8,",
+    "2025-10-15,Bench Press,Chest,100,10,",
+    "2025-10-22,Bench Press,Chest,102,8,",
     "2026-01-01,Bench Press,Chest,100,8,",
     "2026-01-08,Bench Press,Chest,105,8,felt good",
     "2026-01-15,Bench Press,Chest,110,8,",
@@ -25,9 +37,21 @@ SQUAT_ROWS = [
     "2026-01-01,Squat,Legs,150,5,",
     "2026-01-08,Squat,Legs,155,5,",
 ]
+# 9 Squat rows used to pad inline Bench Press fixtures to the 10-row minimum.
+_SQUAT_FILLER = [
+    "2025-09-10,Squat,Legs,130,5,",
+    "2025-09-17,Squat,Legs,132,5,",
+    "2025-09-24,Squat,Legs,135,5,",
+    "2025-10-01,Squat,Legs,137,5,",
+    "2025-10-08,Squat,Legs,140,5,",
+    "2025-10-15,Squat,Legs,142,5,",
+    "2025-10-22,Squat,Legs,145,5,",
+    "2025-11-01,Squat,Legs,147,5,",
+    "2025-11-08,Squat,Legs,150,5,",
+]
 
 
-# ── calculate_hybrid_1rm ─────────────────────────────────────────────────────
+# ── calculate_hybrid_1rm ────────────────────────────────────────────────────
 
 class TestCalculateHybrid1RM:
     def test_zero_reps_returns_zero(self):
@@ -96,11 +120,13 @@ class TestTagComment:
         assert _tag_comment("felt great today") == (0, 0, False, False)
 
 
-# ── run_pipeline ──────────────────────────────────────────────────────────────
+# ── run_pipeline ─────────────────────────────────────────────────────────────
 
 class TestRunPipeline:
     def test_returns_three_values(self):
-        model, feature_cols, summary = run_pipeline(_csv(*BENCH_ROWS, *SQUAT_ROWS))
+        model, feature_cols, summary = run_pipeline(
+            _csv(*BENCH_ROWS, *SQUAT_ROWS)
+        )
         assert model is not None
         assert isinstance(feature_cols, list)
         assert not summary.empty
@@ -116,6 +142,7 @@ class TestRunPipeline:
 
     def test_cardio_excluded_from_model(self):
         f = _csv(
+            *_SQUAT_FILLER,
             "2026-01-01,General Running,Cardio,0,0,",
             "2026-01-01,Bench Press,Chest,100,8,",
         )
@@ -125,6 +152,7 @@ class TestRunPipeline:
 
     def test_drop_sets_excluded(self):
         f = _csv(
+            *_SQUAT_FILLER,
             "2026-01-01,Bench Press,Chest,100,8,",
             "2026-01-01,Bench Press,Chest,80,12,drop set",
             "2026-01-08,Bench Press,Chest,105,8,",
@@ -135,6 +163,7 @@ class TestRunPipeline:
 
     def test_warmup_sets_excluded(self):
         f = _csv(
+            *_SQUAT_FILLER,
             "2026-01-01,Bench Press,Chest,45,15,warm up",
             "2026-01-01,Bench Press,Chest,100,8,",
             "2026-01-08,Bench Press,Chest,105,8,",
@@ -146,28 +175,55 @@ class TestRunPipeline:
     def test_weight_based_warmups_excluded(self):
         # 45 lbs < 60 % of 135 lbs — should be filtered out
         f = _csv(
+            *_SQUAT_FILLER,
             "2026-01-01,Bench Press,Chest,45,15,",
             "2026-01-01,Bench Press,Chest,135,8,",
         )
         _, _, summary = run_pipeline(f)
-        assert summary.iloc[0]["Max_Weight"] == pytest.approx(135.0, abs=0.01)
+        bench = summary[summary["Exercise"] == "Bench Press"]
+        assert bench.iloc[0]["Max_Weight"] == pytest.approx(135.0, abs=0.01)
 
     def test_non_numeric_weight_rows_skipped(self):
         f = _csv(
+            *_SQUAT_FILLER,
             "2026-01-01,Bench Press,Chest,hundred,8,",
             "2026-01-08,Bench Press,Chest,105,8,",
         )
         model, _, summary = run_pipeline(f)
         assert model is not None
-        assert len(summary) == 1
+        bench = summary[summary["Exercise"] == "Bench Press"]
+        assert len(bench) == 1
+        assert bench.iloc[0]["Max_Weight"] == pytest.approx(105.0, abs=0.01)
+
+    def test_missing_required_column_raises(self):
+        f = io.BytesIO(b"Date,Exercise,Weight,Reps\n2026-01-01,Squat,100,5\n")
+        with pytest.raises(ValueError, match="missing required columns"):
+            run_pipeline(f)
+
+    def test_too_few_rows_raises(self):
+        f = _csv("2026-01-01,Bench Press,Chest,100,8,")
+        with pytest.raises(ValueError, match="Not enough training data"):
+            run_pipeline(f)
+
+    def test_all_drop_sets_raises(self):
+        rows = [
+            f"2026-0{i}-01,Bench Press,Chest,100,8,drop set"
+            for i in range(1, 10)
+        ]
+        f = _csv(*rows, "2026-10-01,Bench Press,Chest,100,8,drop set")
+        with pytest.raises(ValueError, match="No valid working sets"):
+            run_pipeline(f)
 
     def test_non_numeric_reps_rows_skipped(self):
         f = _csv(
+            *_SQUAT_FILLER,
             "2026-01-01,Bench Press,Chest,100,many,",
             "2026-01-08,Bench Press,Chest,105,8,",
         )
         _, _, summary = run_pipeline(f)
-        assert len(summary) == 1
+        bench = summary[summary["Exercise"] == "Bench Press"]
+        assert len(bench) == 1
+        assert bench.iloc[0]["Max_Weight"] == pytest.approx(105.0, abs=0.01)
 
     def test_predict_returns_float(self):
         import pandas as pd
@@ -178,10 +234,10 @@ class TestRunPipeline:
         assert len(pred) == 1
         assert isinstance(float(pred[0]), float)
 
-    def test_single_session_completes_without_error(self):
-        f = _csv("2026-01-01,Bench Press,Chest,100,8,")
-        model, feature_cols, summary = run_pipeline(f)
+    def test_completes_without_error(self):
+        model, feature_cols, summary = run_pipeline(_csv(*BENCH_ROWS))
         assert not summary.empty
+        assert model is not None
 
     def test_multiple_exercises_produce_separate_summary_rows(self):
         f = _csv(*BENCH_ROWS, *SQUAT_ROWS)
@@ -197,14 +253,15 @@ class TestRunPipeline:
         assert first["Days_Since_Last"] == pytest.approx(14.0, abs=0.01)
 
     def test_days_since_last_correct_for_second_session(self):
-        # Sessions 7 days apart
+        # Sessions 7 days apart; squat filler satisfies the 10-row minimum
         f = _csv(
+            *_SQUAT_FILLER,
             "2026-01-01,Bench Press,Chest,100,8,",
             "2026-01-08,Bench Press,Chest,105,8,",
         )
         _, _, summary = run_pipeline(f)
-        second = summary[summary["Exercise"] == "Bench Press"].iloc[1]
-        assert second["Days_Since_Last"] == pytest.approx(7.0, abs=0.01)
+        bench = summary[summary["Exercise"] == "Bench Press"]
+        assert bench.iloc[1]["Days_Since_Last"] == pytest.approx(7.0, abs=0.01)
 
     def test_strength_categories_constant_is_a_set(self):
         assert isinstance(STRENGTH_CATEGORIES, set)

@@ -184,14 +184,14 @@ class _ExerciseCard extends StatelessWidget {
                 mode: ex.trainingMode,
                 isPremium: context.watch<SubscriptionViewModel>().isPremium,
                 onChanged: (mode) => vm.setTrainingMode(index, mode),
-                onUpgrade: () => PaywallView.show(context),
+                onUpgrade: () => PaywallView.show(context, source: 'log_rec'),
               ),
             ],
             const SizedBox(height: 12),
             _RecBanner(
               ex: ex,
               isPremium: context.watch<SubscriptionViewModel>().isPremium,
-              onUpgrade: () => PaywallView.show(context),
+              onUpgrade: () => PaywallView.show(context, source: 'log_rec'),
             ),
             if (ex.sets.isNotEmpty) ...[
               const SizedBox(height: 12),

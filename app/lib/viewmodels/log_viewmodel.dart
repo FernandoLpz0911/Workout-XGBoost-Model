@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
@@ -86,7 +87,7 @@ class SessionExercise {
 /// - The [exerciseDict] used to populate category/exercise pickers
 /// - Per-exercise [TrainingMode] preferences
 /// - Loading and error state for import and cloud training operations
-class LogViewModel extends ChangeNotifier {
+class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   final _api = ApiService();
   final _storage = LocalStorageService();
 
@@ -116,6 +117,7 @@ class LogViewModel extends ChangeNotifier {
   bool _isPremium = false;
   SharedPreferences? _prefs;
   StreamSubscription<DocumentSnapshot>? _trainingStatusSub;
+  StreamSubscription<User?>? _authSub;
   Timer? _trainingTimeoutTimer;
 
   /// Cached result of grouping [history] by date — rebuilt only when history
@@ -173,6 +175,10 @@ class LogViewModel extends ChangeNotifier {
   static final _alwaysCategories = _presetExercises.keys.toSet();
 
   LogViewModel() {
+    WidgetsBinding.instance.addObserver(this);
+    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
+      if (user == null) _cancelTrainingWatch();
+    });
     _initialize();
   }
 
@@ -323,10 +329,12 @@ class LogViewModel extends ChangeNotifier {
         ex.trainingMode.name,
       );
       compute(_computeRec, params).then((rec) {
+        if (!hasListeners) return;
         ex.recommendation = rec;
         notifyListeners();
         _tryCloudRec(ex);
       }).catchError((_) {
+        if (!hasListeners) return;
         ex.recError = 'Could not compute recommendation.';
         notifyListeners();
       });
@@ -342,10 +350,14 @@ class LogViewModel extends ChangeNotifier {
     try {
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
       if (token == null) return;
+      final mode = trainingModeFor(ex.exercise) == TrainingMode.strength
+          ? 'strength'
+          : 'hypertrophy';
       final cloud = await _api.getRecommendation(
-          ex.exercise, ex.category, authToken: token);
+          ex.exercise, ex.category, authToken: token, mode: mode);
       if (cloud != null) {
         ex.cloudRecommendation = cloud;
+        if (!hasListeners) return;
         notifyListeners();
       }
     } catch (_) {}
@@ -495,6 +507,7 @@ class LogViewModel extends ChangeNotifier {
       _loadTodaySession();
       AnalyticsService.logCsvImported(count);
       lastActionMessage = 'Imported $count sets from CSV.';
+      if (count > 0) NotificationService.scheduleWorkoutReminder();
     } catch (e) {
       lastActionMessage = 'Import failed: $e';
     } finally {
@@ -519,7 +532,16 @@ class LogViewModel extends ChangeNotifier {
         lastActionMessage = 'Sign in required to retrain the cloud model.';
         return;
       }
-      final bytes = await _storage.exportAsCsvBytes();
+      final bytes = await _storage
+          .exportAsCsvBytes()
+          .timeout(const Duration(minutes: 2));
+      const maxBytes = 50 * 1024 * 1024;
+      if (bytes.length > maxBytes) {
+        lastActionMessage =
+            'Local data exceeds the 50 MB upload limit. '
+            'Try clearing old sets before retraining.';
+        return;
+      }
       await _api.trainFromCsvBytes(bytes, authToken: token);
       AnalyticsService.logCloudRetrain();
       lastActionMessage = 'Training queued — you\'ll be notified when complete.';
@@ -567,12 +589,14 @@ class LogViewModel extends ChangeNotifier {
               'Cloud model trained successfully. '
               'Tap an exercise to get updated recommendations.';
           _cancelTrainingWatch();
+          if (!hasListeners) return;
           notifyListeners();
         } else if (status == 'failed') {
           final error =
               snap.data()?['error'] as String? ?? 'Unknown error';
           lastActionMessage = 'Cloud training failed: $error';
           _cancelTrainingWatch();
+          if (!hasListeners) return;
           notifyListeners();
         }
       },
@@ -585,6 +609,7 @@ class LogViewModel extends ChangeNotifier {
             'Cloud training is taking longer than expected. '
             'Check back later.';
         _cancelTrainingWatch();
+        if (!hasListeners) return;
         notifyListeners();
       }
     });
@@ -611,8 +636,15 @@ class LogViewModel extends ChangeNotifier {
       if (token != null) {
         await _api.deleteUserData(authToken: token);
       }
-    } catch (_) {}
+    } catch (e) {
+      lastActionMessage = 'Cloud deletion failed: $e. '
+          'Check your connection and try again.';
+      isDeleting = false;
+      notifyListeners();
+      return;
+    }
     await _storage.clear();
+    NotificationService.cancelWorkoutReminder();
     final prefs = _prefs ??= await SharedPreferences.getInstance();
     await prefs.clear();
     history.clear();
@@ -625,10 +657,17 @@ class LogViewModel extends ChangeNotifier {
     await FirebaseAuth.instance.signOut();
   }
 
+  void dismissLastActionMessage() {
+    lastActionMessage = null;
+    notifyListeners();
+  }
+
   /// Permanently wipes all local sets and the Firestore collection so data
   /// does not re-sync on the next launch. Resets the sync timestamp accordingly.
   Future<void> clearLocalData() async {
+    _cancelTrainingWatch();
     await _storage.clear();
+    NotificationService.cancelWorkoutReminder();
     try {
       final col = _setsCollection();
       if (col != null) {
@@ -671,15 +710,27 @@ class LogViewModel extends ChangeNotifier {
       final lastMs = prefs.getInt('last_firestore_sync_ms');
 
       final Query<Map<String, dynamic>> query = lastMs == null
-          ? col
-          : col.where('createdAt',
-              isGreaterThan: Timestamp.fromMillisecondsSinceEpoch(lastMs));
+          ? col.limit(500)
+          : col
+              .where('createdAt',
+                  isGreaterThan: Timestamp.fromMillisecondsSinceEpoch(lastMs))
+              .limit(500);
 
       final snap = await query.get();
 
+      int? maxCreatedAtMs;
       if (snap.docs.isNotEmpty) {
         final remoteSets =
             snap.docs.map((d) => WorkoutSet.fromJson(d.data())).toList();
+        for (final doc in snap.docs) {
+          final ts = doc.data()['createdAt'];
+          if (ts is Timestamp) {
+            final ms = ts.millisecondsSinceEpoch;
+            if (maxCreatedAtMs == null || ms > maxCreatedAtMs) {
+              maxCreatedAtMs = ms;
+            }
+          }
+        }
         await _storage.appendSets(remoteSets);
         final newCount = await _storage.count();
         if (newCount != localSetCount) {
@@ -690,8 +741,8 @@ class LogViewModel extends ChangeNotifier {
         }
       }
 
-      await prefs.setInt(
-          'last_firestore_sync_ms', DateTime.now().millisecondsSinceEpoch);
+      await prefs.setInt('last_firestore_sync_ms',
+          maxCreatedAtMs ?? DateTime.now().millisecondsSinceEpoch);
     } catch (_) {}
   }
 
@@ -717,7 +768,14 @@ class LogViewModel extends ChangeNotifier {
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _syncFromFirestore();
+  }
+
+  @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _authSub?.cancel();
     _cancelTrainingWatch();
     super.dispose();
   }

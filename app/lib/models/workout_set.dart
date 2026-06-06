@@ -81,8 +81,10 @@ class WorkoutSet {
     final dUnit =
         (distance != null && distance! > 0) ? (distanceUnit ?? 'mi') : '';
     final dur = duration ?? '';
+    final ex = exercise.replaceAll('"', '""');
+    final cat = category.replaceAll('"', '""');
     final c = comment.replaceAll('"', '""');
-    return '$d,$exercise,$category,$w,$wUnit,$r,$dist,$dUnit,$dur,"$c"';
+    return '$d,"$ex","$cat",$w,$wUnit,$r,$dist,$dUnit,$dur,"$c"';
   }
 
   /// Human-readable summary shown in the log and history UI.

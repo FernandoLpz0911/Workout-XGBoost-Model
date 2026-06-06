@@ -49,6 +49,9 @@ class ApiService {
         throw Exception(
             'Training already in progress. Wait for it to complete.');
       }
+      if (streamed.statusCode == 413) {
+        throw Exception('CSV file is too large to upload.');
+      }
       throw Exception('Training failed: $body');
     }
   }
@@ -82,6 +85,7 @@ class ApiService {
     String exercise,
     String category, {
     String? authToken,
+    String mode = 'hypertrophy',
   }) async {
     final response = await _client
         .post(
@@ -90,7 +94,11 @@ class ApiService {
             'Content-Type': 'application/json',
             ..._authHeader(authToken),
           },
-          body: jsonEncode({'exercise': exercise, 'category': category}),
+          body: jsonEncode({
+            'exercise': exercise,
+            'category': category,
+            'mode': mode,
+          }),
         )
         .timeout(const Duration(seconds: 10));
 

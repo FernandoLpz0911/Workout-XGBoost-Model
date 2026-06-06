@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:repiq/services/analytics_service.dart';
 import 'package:repiq/services/subscription_service.dart';
 
 /// Manages subscription state and exposes [isPremium] to the widget tree.
@@ -80,12 +81,17 @@ class SubscriptionViewModel extends ChangeNotifier {
 
   void _onPurchaseUpdate(List<PurchaseDetails> purchases) async {
     for (final purchase in purchases) {
-      if (purchase.status == PurchaseStatus.purchased ||
-          purchase.status == PurchaseStatus.restored) {
+      if (purchase.status == PurchaseStatus.purchased) {
+        await _service.completePurchase(purchase);
+        await _setPremium(true);
+        final plan = purchase.productID == kAnnualProductId ? 'annual' : 'monthly';
+        AnalyticsService.logSubscriptionStarted(plan);
+      } else if (purchase.status == PurchaseStatus.restored) {
         await _service.completePurchase(purchase);
         await _setPremium(true);
       } else if (purchase.status == PurchaseStatus.error) {
         _error = purchase.error?.message ?? 'Purchase error.';
+        if (!hasListeners) return;
         notifyListeners();
       }
     }
@@ -95,6 +101,7 @@ class SubscriptionViewModel extends ChangeNotifier {
     _isPremium = value;
     final prefs = _prefs ??= await SharedPreferences.getInstance();
     await prefs.setBool(_premiumCacheKey, value);
+    if (!hasListeners) return;
     notifyListeners();
   }
 

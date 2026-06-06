@@ -38,7 +38,10 @@ _DROP_SET_RE = re.compile(r"drop\s*set|no rest", re.IGNORECASE)
 _WARMUP_RE = re.compile(r"warm[\s-]?up", re.IGNORECASE)
 
 STRENGTH_CATEGORIES = {
-    "Chest", "Back", "Legs", "Shoulders", "Biceps", "Triceps", "Arms", "Abs"
+    # FitNotes export names
+    "Chest", "Back", "Legs", "Shoulders", "Biceps", "Triceps", "Arms", "Abs",
+    # In-app manual-entry names (differ from FitNotes)
+    "Core", "Forearms",
 }
 
 
@@ -74,6 +77,14 @@ def run_pipeline(uploaded_file) -> tuple:
     df = pd.read_csv(uploaded_file)
     df.columns = df.columns.str.strip()
 
+    required = {"Date", "Exercise", "Category", "Weight", "Reps"}
+    missing = required - set(df.columns)
+    if missing:
+        raise ValueError(
+            f"CSV is missing required columns: {', '.join(sorted(missing))}. "
+            "Export your data from FitNotes and try again."
+        )
+
     df = df[df["Category"].isin(STRENGTH_CATEGORIES)].copy()
 
     # Coerce before dropna so non-numeric strings are treated as missing
@@ -82,6 +93,12 @@ def run_pipeline(uploaded_file) -> tuple:
     df["Reps"] = pd.to_numeric(df["Reps"], errors="coerce")
     df = df.dropna(subset=["Weight", "Reps"]).copy()
     df["Date"] = pd.to_datetime(df["Date"])
+
+    if len(df) < 10:
+        raise ValueError(
+            f"Not enough training data: {len(df)} valid strength set(s) found. "
+            "Log at least 10 sets across multiple sessions before retraining."
+        )
 
     tags = df["Comment"].apply(_tag_comment)
     df[["Form_Issue", "Fatigue_Flag", "Is_Drop_Set", "Is_Warmup"]] = (
@@ -93,8 +110,15 @@ def run_pipeline(uploaded_file) -> tuple:
     working = df[~df["Is_Drop_Set"] & ~df["Is_Warmup"]].copy()
 
     # Also filter weight-based warm-ups: sets < 60 % of that session's max weight.
-    session_max_w = working.groupby(["Date", "Exercise"])["Weight"].transform("max")
-    working = working[working["Weight"] >= 0.6 * session_max_w].copy()
+    if not working.empty:
+        session_max_w = working.groupby(["Date", "Exercise"])["Weight"].transform("max")
+        working = working[working["Weight"] >= 0.6 * session_max_w].copy()
+
+    if working.empty:
+        raise ValueError(
+            "No valid working sets found after excluding drop sets and warm-ups. "
+            "Ensure your CSV contains at least some regular strength sets."
+        )
 
     working["Estimated_1RM"] = working.apply(
         lambda r: calculate_hybrid_1rm(r["Weight"], int(r["Reps"])), axis=1

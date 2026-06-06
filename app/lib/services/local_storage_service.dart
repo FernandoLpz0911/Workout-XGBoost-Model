@@ -20,6 +20,9 @@ class LocalStorageService {
   static const _modesKey = 'training_modes_v1';
   static const _migratedKey = 'sqflite_migrated_v1';
 
+  LocalStorageService({String? dbPath}) : _dbPath = dbPath;
+  final String? _dbPath;
+
   Database? _db;
 
   Future<Database> get _database async {
@@ -28,7 +31,7 @@ class LocalStorageService {
   }
 
   Future<Database> _openDb() async {
-    final path = join(await getDatabasesPath(), 'repiq.db');
+    final path = _dbPath ?? join(await getDatabasesPath(), 'repiq.db');
     return openDatabase(
       path,
       version: 1,
@@ -73,18 +76,6 @@ class LocalStorageService {
     return rows.map(_rowToSet).toList();
   }
 
-  /// Replaces every row. Used only during CSV import merge.
-  Future<void> saveAll(List<WorkoutSet> sets) async {
-    final db = await _database;
-    await db.transaction((txn) async {
-      await txn.delete('sets');
-      for (final s in sets) {
-        await txn.insert('sets', _setToRow(s),
-            conflictAlgorithm: ConflictAlgorithm.replace);
-      }
-    });
-  }
-
   /// Inserts new sets, silently skipping any duplicates.
   Future<void> appendSets(List<WorkoutSet> newSets) async {
     final db = await _database;
@@ -105,6 +96,11 @@ class LocalStorageService {
   Future<void> clear() async {
     final db = await _database;
     await db.delete('sets');
+  }
+
+  Future<void> close() async {
+    await _db?.close();
+    _db = null;
   }
 
   /// O(1) delete using the fingerprint primary key.

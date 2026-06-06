@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/viewmodels/auth_viewmodel.dart';
+import 'package:repiq/views/legal_view.dart';
 
 /// Full-screen sign-in screen shown when the user is not authenticated.
 class SignInView extends StatelessWidget {
@@ -57,14 +58,14 @@ class SignInView extends StatelessWidget {
                 spacing: 4,
                 children: [
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () => LegalView.showPrivacy(context),
                     child: const Text('Privacy Policy',
                         style: TextStyle(color: Colors.grey, fontSize: 12)),
                   ),
                   const Text('·',
                       style: TextStyle(color: Colors.grey, fontSize: 12)),
                   TextButton(
-                    onPressed: () {},
+                    onPressed: () => LegalView.showTerms(context),
                     child: const Text('Terms of Service',
                         style: TextStyle(color: Colors.grey, fontSize: 12)),
                   ),

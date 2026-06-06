@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
 import 'package:provider/provider.dart';
+import 'package:repiq/services/analytics_service.dart';
 import 'package:repiq/services/subscription_service.dart';
 import 'package:repiq/viewmodels/subscription_viewmodel.dart';
 import 'package:repiq/views/legal_view.dart';
@@ -10,8 +11,12 @@ class PaywallView extends StatelessWidget {
   const PaywallView({super.key});
 
   /// Push-navigates to the paywall and returns when dismissed.
-  static Future<void> show(BuildContext context) =>
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PaywallView()));
+  /// [source] identifies which feature gate triggered the paywall.
+  static Future<void> show(BuildContext context, {String source = 'unknown'}) {
+    AnalyticsService.logPaywallShown(source);
+    return Navigator.of(context).push(
+        MaterialPageRoute(builder: (_) => const PaywallView()));
+  }
 
   @override
   Widget build(BuildContext context) {
