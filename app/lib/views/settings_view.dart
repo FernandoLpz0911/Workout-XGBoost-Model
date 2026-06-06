@@ -112,32 +112,34 @@ class SettingsView extends StatelessWidget {
 
         if (vm.lastActionMessage != null) ...[
           const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: vm.lastActionMessage!.contains('fail') ||
-                      vm.lastActionMessage!.contains('Error')
-                  ? Colors.redAccent.withValues(alpha: 0.15)
-                  : Colors.green.withValues(alpha: 0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Row(
-              children: [
-                Icon(
-                  vm.lastActionMessage!.contains('fail') ||
-                          vm.lastActionMessage!.contains('Error')
-                      ? Icons.error_outline
-                      : Icons.check_circle_outline,
-                  color: vm.lastActionMessage!.contains('fail') ||
-                          vm.lastActionMessage!.contains('Error')
-                      ? Colors.redAccent
-                      : Colors.green,
-                ),
-                const SizedBox(width: 12),
-                Expanded(child: Text(vm.lastActionMessage!)),
-              ],
-            ),
-          ),
+          Builder(builder: (context) {
+            final msg = vm.lastActionMessage!;
+            final isError = msg.contains('fail') ||
+                msg.contains('Error') ||
+                msg.contains('taking longer') ||
+                msg.contains('required');
+            return Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: isError
+                    ? Colors.redAccent.withValues(alpha: 0.15)
+                    : Colors.green.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isError
+                        ? Icons.error_outline
+                        : Icons.check_circle_outline,
+                    color: isError ? Colors.redAccent : Colors.green,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(child: Text(msg)),
+                ],
+              ),
+            );
+          }),
         ],
 
         const SizedBox(height: 24),
