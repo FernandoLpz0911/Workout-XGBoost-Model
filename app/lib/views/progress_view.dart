@@ -120,7 +120,7 @@ class _ProgressViewState extends State<ProgressView> {
             children: [
               DropdownButtonFormField<String>(
                 decoration: const InputDecoration(labelText: 'Exercise'),
-                initialValue: _selectedExercise,
+                value: _selectedExercise,
                 items: exercises
                     .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                     .toList(),
