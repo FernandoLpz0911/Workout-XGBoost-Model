@@ -44,14 +44,15 @@ class LocalRecommendationEngine {
 
   // ignore: deprecated_member_use
   static final _formIssueRe = RegExp(
-    r"did it wrong|wrong|unsure|too heavy|failed|couldn't|sloppy|"
-    r'lost balance|form is\s*(off|weird|bad)|injury',
+    r"did it wrong|wrong|unsure|too heavy|failed|couldn't|can't complete|"
+    r'sloppy|lost balance|form is\s*(off|weird|bad)|'
+    r'feeling tricep|feeling arm|injury',
     caseSensitive: false,
   );
   // ignore: deprecated_member_use
   static final _fatigueRe = RegExp(
     r'forearm|fatigued|tired|gave out|grip\s*(loose|gave|gone|tiring)|'
-    r'arms gave|tiring out',
+    r'arms gave|tiring out|limiting',
     caseSensitive: false,
   );
   static final _dropSetRe =

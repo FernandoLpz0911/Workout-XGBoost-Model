@@ -1,16 +1,26 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/local_storage_service.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
+  setUpAll(() {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
+  });
+
   late LocalStorageService storage;
 
   setUp(() {
     SharedPreferences.setMockInitialValues({});
-    storage = LocalStorageService();
+    storage = LocalStorageService(dbPath: inMemoryDatabasePath);
+  });
+
+  tearDown(() async {
+    await storage.close();
   });
   WorkoutSet strengthSet({
     DateTime? date,
@@ -34,10 +44,10 @@ void main() {
     });
   });
 
-  group('saveAll / loadAll round-trip', () {
+  group('appendSets / loadAll round-trip', () {
     test('persists and restores a strength set', () async {
       final set = strengthSet();
-      await storage.saveAll([set]);
+      await storage.appendSets([set]);
       final loaded = await storage.loadAll();
       expect(loaded.length, 1);
       expect(loaded.first.exercise, set.exercise);
@@ -57,22 +67,23 @@ void main() {
         duration: '0:28:00',
         comment: '',
       );
-      await storage.saveAll([set]);
+      await storage.appendSets([set]);
       final loaded = await storage.loadAll();
       expect(loaded.first.distance, closeTo(3.14, 0.001));
       expect(loaded.first.distanceUnit, 'mi');
       expect(loaded.first.duration, '0:28:00');
     });
 
-    test('saveAll overwrites all previously stored sets', () async {
-      await storage.saveAll([strengthSet()]);
+    test('clear then appendSets replaces stored sets', () async {
+      await storage.appendSets([strengthSet()]);
+      await storage.clear();
       final replacement = strengthSet(
         date: DateTime(2026, 2, 1),
         exercise: 'Squat',
         category: 'Legs',
         weight: 200.0,
       );
-      await storage.saveAll([replacement]);
+      await storage.appendSets([replacement]);
       final loaded = await storage.loadAll();
       expect(loaded.length, 1);
       expect(loaded.first.exercise, 'Squat');
@@ -84,7 +95,7 @@ void main() {
         strengthSet(date: DateTime(2026, 1, 2), exercise: 'Squat',
             category: 'Legs', weight: 200, reps: 5),
       ];
-      await storage.saveAll(sets);
+      await storage.appendSets(sets);
       final loaded = await storage.loadAll();
       expect(loaded.length, 2);
     });
@@ -96,7 +107,7 @@ void main() {
     });
 
     test('appends to existing sets without replacing them', () async {
-      await storage.saveAll([strengthSet()]);
+      await storage.appendSets([strengthSet()]);
       final extra = strengthSet(
         date: DateTime(2026, 2, 1),
         exercise: 'Squat',
@@ -123,13 +134,13 @@ void main() {
     });
 
     test('returns correct count after saving', () async {
-      await storage.saveAll([strengthSet(), strengthSet(weight: 140.0)]);
+      await storage.appendSets([strengthSet(), strengthSet(weight: 140.0)]);
       expect(await storage.count(), 2);
     });
   });
   group('clear', () {
     test('removes all stored sets', () async {
-      await storage.saveAll([strengthSet()]);
+      await storage.appendSets([strengthSet()]);
       await storage.clear();
       expect(await storage.loadAll(), isEmpty);
     });
@@ -141,7 +152,7 @@ void main() {
   });
   group('exportAsCsvBytes', () {
     test('produces CSV with the correct FitNotes header', () async {
-      await storage.saveAll([strengthSet()]);
+      await storage.appendSets([strengthSet()]);
       final csv = String.fromCharCodes(await storage.exportAsCsvBytes());
       expect(csv, startsWith(
         'Date,Exercise,Category,Weight,Weight Unit,Reps,'
@@ -150,7 +161,7 @@ void main() {
     });
 
     test('CSV contains the stored exercise name and weight', () async {
-      await storage.saveAll([strengthSet()]);
+      await storage.appendSets([strengthSet()]);
       final csv = String.fromCharCodes(await storage.exportAsCsvBytes());
       expect(csv, contains('Bench Press'));
       expect(csv, contains('135.0'));

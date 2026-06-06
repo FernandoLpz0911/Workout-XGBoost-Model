@@ -98,6 +98,20 @@ void main() {
       await api.getRecommendation('Squat', 'Legs');
       expect(capturedAuth, isNull);
     });
+
+    test('sends mode in request body', () async {
+      String? capturedBody;
+      final api = ApiService(
+        client: MockClient((req) async {
+          capturedBody = req.body;
+          return http.Response('not found', 404);
+        }),
+      );
+
+      await api.getRecommendation('Squat', 'Legs', mode: 'strength');
+      final body = jsonDecode(capturedBody!) as Map<String, dynamic>;
+      expect(body['mode'], 'strength');
+    });
   });
 
   group('ApiService.trainFromCsvBytes', () {
@@ -145,6 +159,18 @@ void main() {
         () => api.trainFromCsvBytes(_csvBytes, authToken: 'token'),
         throwsA(predicate<Exception>(
             (e) => e.toString().contains('in progress'))),
+      );
+    });
+
+    test('413 throws with too-large message', () async {
+      final api = _serviceWithStreamed((_) => http.StreamedResponse(
+            Stream.value(utf8.encode('too large')),
+            413,
+          ));
+      expect(
+        () => api.trainFromCsvBytes(_csvBytes, authToken: 'token'),
+        throwsA(predicate<Exception>(
+            (e) => e.toString().contains('too large'))),
       );
     });
 

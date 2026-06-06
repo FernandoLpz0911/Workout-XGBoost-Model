@@ -107,7 +107,7 @@ class SettingsView extends StatelessWidget {
           lockIcon: !sub.isPremium,
           onTap: sub.isPremium
               ? () => _confirmRetrain(context, vm)
-              : () => PaywallView.show(context),
+              : () => PaywallView.show(context, source: 'settings_retrain'),
         ),
 
         if (vm.lastActionMessage != null) ...[
@@ -136,6 +136,11 @@ class SettingsView extends StatelessWidget {
                   ),
                   const SizedBox(width: 12),
                   Expanded(child: Text(msg)),
+                  GestureDetector(
+                    onTap: () => vm.dismissLastActionMessage(),
+                    child: const Icon(Icons.close,
+                        size: 16, color: Colors.grey),
+                  ),
                 ],
               ),
             );
@@ -387,7 +392,7 @@ class _SubscriptionCard extends StatelessWidget {
         subtitle: const Text('Upgrade to unlock AI insights, charts & more',
             style: TextStyle(color: Colors.grey, fontSize: 12)),
         trailing: ElevatedButton(
-          onPressed: () => PaywallView.show(context),
+          onPressed: () => PaywallView.show(context, source: 'settings_upgrade'),
           style: ElevatedButton.styleFrom(
             backgroundColor: Colors.redAccent,
             foregroundColor: Colors.white,

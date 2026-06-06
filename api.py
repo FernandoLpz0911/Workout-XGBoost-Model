@@ -61,6 +61,7 @@ _gcs_client = gcs.Client()
 # Entries expire after _MODEL_CACHE_TTL seconds so retraining propagates to
 # all Cloud Run instances within that window.
 _CACHE_MAX = 50
+_MAX_CSV_BYTES = 50 * 1024 * 1024  # 50 MB hard cap on training uploads
 _MODEL_CACHE_TTL = 300.0  # seconds; bounds post-retrain cross-instance staleness
 _model_cache: dict[str, tuple] = {}
 _model_loaded_at: dict[str, float] = {}
@@ -204,7 +205,14 @@ def require_premium(uid: str = Depends(get_uid)) -> str:
     doc = db.collection("users").document(uid).get()
     if not doc.exists:
         raise HTTPException(403, "No user record found.")
-    is_premium = doc.to_dict().get("subscriptionStatus") == "active"
+    data = doc.to_dict()
+    is_premium = data.get("subscriptionStatus") == "active"
+    if is_premium:
+        expiry = data.get("subscriptionExpiry")
+        if expiry is not None:
+            expiry_dt = expiry.astimezone(timezone.utc) if hasattr(expiry, "astimezone") else None
+            if expiry_dt is not None and expiry_dt < datetime.now(timezone.utc):
+                is_premium = False
     if len(_premium_cache) >= _PREMIUM_CACHE_MAX:
         del _premium_cache[next(iter(_premium_cache))]
     _premium_cache[uid] = (is_premium, now + _PREMIUM_TTL)
@@ -301,6 +309,13 @@ async def train_model(
             pass
         raise HTTPException(400, "Failed to read uploaded file.")
 
+    if len(csv_bytes) > _MAX_CSV_BYTES:
+        raise HTTPException(
+            413,
+            f"File too large. Maximum size is "
+            f"{_MAX_CSV_BYTES // (1024 * 1024)} MB.",
+        )
+
     background_tasks.add_task(_run_train, uid, csv_bytes)
     return {"message": "Training started. Watch trainingStatus/current."}
 
@@ -324,6 +339,7 @@ def get_exercises(uid: str = Depends(get_uid)):
 class WorkoutRequest(BaseModel):
     category: str
     exercise: str
+    mode: str = "hypertrophy"  # "hypertrophy" | "strength"
 
 
 def _get_weight(one_rm: float, reps: int) -> float:
@@ -387,22 +403,32 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
     }
     threshold = thresholds.get(req.category, 0.95)
 
+    is_strength = req.mode == "strength"
+    graduation_reps = 6 if is_strength else 12
+    default_reps = 5 if is_strength else 10
+    stabilize_threshold = 3 if is_strength else 8
+    stabilize_reps = 4 if is_strength else 10
+    volume_reps = 6 if is_strength else 12
+    weight_increment = 5.0 if is_strength else 2.5
+    mode_label = "STRENGTH" if is_strength else "HYPERTROPHY"
+
     if had_form:
-        target_w, target_r = last_w, 8
+        target_w, target_r = last_w, default_reps
         base_status = "FORM FOCUS: Repeat weight to nail technique"
     elif plateau:
         target_w = round(last_w * 0.6 / 2.5) * 2.5
         target_r = 15
         base_status = "DELOAD: Plateau — back off to rebuild work capacity"
-    elif last_reps >= 10:
-        target_w, target_r = last_w + 2.5, 8
-        base_status = "PROGRESSION: Weight Increased"
-    elif last_reps < 6:
-        target_w, target_r = last_w, 8
-        base_status = "STABILIZATION: Build rep count first"
+    elif last_reps >= graduation_reps:
+        target_w = last_w + weight_increment
+        target_r = default_reps
+        base_status = f"{mode_label} PROGRESSION: Weight Increased"
+    elif last_reps < stabilize_threshold:
+        target_w, target_r = last_w, stabilize_reps
+        base_status = f"{mode_label} STABILIZATION: Build rep count first"
     else:
-        target_w, target_r = last_w, 10
-        base_status = "VOLUME: Push for graduation threshold"
+        target_w, target_r = last_w, volume_reps
+        base_status = f"{mode_label} VOLUME: Push for graduation threshold"
 
     if last_w == 0:
         target_w = round(_get_weight(pred_1rm, 8) / 2.5) * 2.5

@@ -71,13 +71,19 @@ class SubscriptionService {
   }
 
   /// Reads the user's current subscription status directly from Firestore.
-  /// Returns true if the status is 'active'.
+  /// Returns true only if status is 'active' and subscriptionExpiry has not passed.
   Future<bool> fetchPremiumStatus() async {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return false;
     final snap = await _firestore.collection('users').doc(uid).get();
     if (!snap.exists) return false;
-    return snap.data()?['subscriptionStatus'] == 'active';
+    final data = snap.data()!;
+    if (data['subscriptionStatus'] != 'active') return false;
+    final expiry = data['subscriptionExpiry'];
+    if (expiry is Timestamp) {
+      if (expiry.toDate().toUtc().isBefore(DateTime.now().toUtc())) return false;
+    }
+    return true;
   }
 
   void dispose() => _purchaseSub?.cancel();
