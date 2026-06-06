@@ -199,3 +199,21 @@ class TestModelCache:
         _model_cache["only_one"] = (MagicMock(), [], MagicMock())
         _evict_model_cache()
         assert "only_one" in _model_cache
+
+
+class TestDeleteUserDataEndpoint:
+    def test_returns_200(self):
+        response = client.delete("/delete-user-data")
+        assert response.status_code == 200
+        assert "deleted" in response.json()["message"].lower()
+
+    def test_evicts_model_cache(self):
+        _inject_model(UID, _make_model_assets())
+        assert UID in _model_cache
+        client.delete("/delete-user-data")
+        assert UID not in _model_cache
+
+    def test_evicts_premium_cache(self):
+        _premium_cache[UID] = (True, time.monotonic() + 60)
+        client.delete("/delete-user-data")
+        assert UID not in _premium_cache

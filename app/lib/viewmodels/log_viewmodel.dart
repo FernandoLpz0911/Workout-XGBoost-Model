@@ -115,6 +115,7 @@ class LogViewModel extends ChangeNotifier {
   bool _isPremium = false;
   SharedPreferences? _prefs;
   StreamSubscription<DocumentSnapshot>? _trainingStatusSub;
+  Timer? _trainingTimeoutTimer;
 
   /// Cached result of grouping [history] by date — rebuilt only when history
   /// changes, not on every widget rebuild.
@@ -532,11 +533,19 @@ class LogViewModel extends ChangeNotifier {
 
   /// Listens to ``trainingStatus/current`` in Firestore and updates
   /// [lastActionMessage] when the background job finishes or fails.
-  /// Cancels itself once a terminal status is received.
+  ///
+  /// Guards against stale docs by requiring a ``"training"`` event before
+  /// reacting to ``"complete"`` or ``"failed"`` — prevents a previous run's
+  /// terminal status from firing immediately on a fresh watch.
+  ///
+  /// Cancels automatically on a terminal status or after 15 minutes.
   void _watchTrainingStatus() {
     final uid = FirebaseAuth.instance.currentUser?.uid;
     if (uid == null) return;
-    _trainingStatusSub?.cancel();
+    _cancelTrainingWatch();
+
+    var seenTraining = false;
+
     _trainingStatusSub = FirebaseFirestore.instance
         .collection('users')
         .doc(uid)
@@ -547,27 +556,67 @@ class LogViewModel extends ChangeNotifier {
       (snap) {
         if (!snap.exists) return;
         final status = snap.data()?['status'] as String?;
+        if (status == 'training') {
+          seenTraining = true;
+          return;
+        }
+        if (!seenTraining) return;
         if (status == 'complete') {
           lastActionMessage =
               'Cloud model trained successfully. '
               'Tap an exercise to get updated recommendations.';
-          _trainingStatusSub?.cancel();
-          _trainingStatusSub = null;
+          _cancelTrainingWatch();
           notifyListeners();
         } else if (status == 'failed') {
           final error =
               snap.data()?['error'] as String? ?? 'Unknown error';
           lastActionMessage = 'Cloud training failed: $error';
-          _trainingStatusSub?.cancel();
-          _trainingStatusSub = null;
+          _cancelTrainingWatch();
           notifyListeners();
         }
       },
-      onError: (_) {
-        _trainingStatusSub?.cancel();
-        _trainingStatusSub = null;
-      },
+      onError: (_) => _cancelTrainingWatch(),
     );
+
+    _trainingTimeoutTimer = Timer(const Duration(minutes: 15), () {
+      if (_trainingStatusSub != null) {
+        lastActionMessage =
+            'Cloud training is taking longer than expected. '
+            'Check back later.';
+        _cancelTrainingWatch();
+        notifyListeners();
+      }
+    });
+  }
+
+  void _cancelTrainingWatch() {
+    _trainingStatusSub?.cancel();
+    _trainingStatusSub = null;
+    _trainingTimeoutTimer?.cancel();
+    _trainingTimeoutTimer = null;
+  }
+
+  /// Deletes all cloud data (GCS, Firestore, Firebase Auth account) via the
+  /// backend, then clears all local storage and in-memory state.
+  ///
+  /// Callers should navigate to the sign-in screen after this returns.
+  Future<void> deleteAccount() async {
+    _cancelTrainingWatch();
+    try {
+      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
+      if (token != null) {
+        await _api.deleteUserData(authToken: token);
+      }
+    } catch (_) {}
+    await _storage.clear();
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    await prefs.clear();
+    history.clear();
+    _invalidateHistoryCache();
+    session.clear();
+    localSetCount = 0;
+    lastActionMessage = null;
+    notifyListeners();
   }
 
   /// Permanently wipes all local sets and the Firestore collection so data
@@ -663,7 +712,7 @@ class LogViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    _trainingStatusSub?.cancel();
+    _cancelTrainingWatch();
     super.dispose();
   }
 
