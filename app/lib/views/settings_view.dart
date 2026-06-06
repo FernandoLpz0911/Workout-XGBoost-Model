@@ -174,6 +174,14 @@ class SettingsView extends StatelessWidget {
           enabled: vm.localSetCount > 0,
           onTap: () => _confirmClear(context, vm),
         ),
+        const SizedBox(height: 8),
+        _ActionTile(
+          icon: Icons.no_accounts_outlined,
+          title: 'Delete Account',
+          subtitle: 'Permanently deletes your account and all data',
+          iconColor: Colors.redAccent,
+          onTap: () => _confirmDeleteAccount(context, vm),
+        ),
       ],
     );
   }
@@ -207,6 +215,32 @@ class SettingsView extends StatelessWidget {
               vm.trainOnLocalData();
             },
             child: const Text('Retrain'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _confirmDeleteAccount(BuildContext context, LogViewModel vm) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete account?'),
+        content: const Text(
+            'This permanently deletes your account, all cloud data, '
+            'and local history. This cannot be undone.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              vm.deleteAccount();
+            },
+            child: const Text('Delete',
+                style: TextStyle(color: Colors.redAccent)),
           ),
         ],
       ),
