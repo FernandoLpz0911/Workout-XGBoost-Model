@@ -180,6 +180,7 @@ class SettingsView extends StatelessWidget {
           title: 'Delete Account',
           subtitle: 'Permanently deletes your account and all data',
           iconColor: Colors.redAccent,
+          loading: vm.isDeleting,
           onTap: () => _confirmDeleteAccount(context, vm),
         ),
       ],
@@ -222,29 +223,57 @@ class SettingsView extends StatelessWidget {
   }
 
   void _confirmDeleteAccount(BuildContext context, LogViewModel vm) {
+    final controller = TextEditingController();
     showDialog<void>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete account?'),
-        content: const Text(
-            'This permanently deletes your account, all cloud data, '
-            'and local history. This cannot be undone.'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
+      builder: (_) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Delete account?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'This permanently deletes your account, all cloud data, '
+                'and local history. This cannot be undone.',
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Type DELETE to confirm:',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  hintText: 'DELETE',
+                  border: OutlineInputBorder(),
+                  isDense: true,
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
           ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              vm.deleteAccount();
-            },
-            child: const Text('Delete',
-                style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: controller.text == 'DELETE'
+                  ? () {
+                      Navigator.pop(context);
+                      vm.deleteAccount();
+                    }
+                  : null,
+              child: const Text('Delete',
+                  style: TextStyle(color: Colors.redAccent)),
+            ),
+          ],
+        ),
       ),
-    );
+    ).then((_) => controller.dispose());
   }
 
   void _confirmClear(BuildContext context, LogViewModel vm) {
