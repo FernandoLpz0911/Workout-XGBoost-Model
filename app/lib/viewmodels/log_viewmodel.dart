@@ -103,6 +103,7 @@ class LogViewModel extends ChangeNotifier {
 
   bool isTraining = false;
   bool isImporting = false;
+  bool isDeleting = false;
 
   /// Result message from the last import or cloud training action.
   String? lastActionMessage;
@@ -597,10 +598,13 @@ class LogViewModel extends ChangeNotifier {
   }
 
   /// Deletes all cloud data (GCS, Firestore, Firebase Auth account) via the
-  /// backend, then clears all local storage and in-memory state.
+  /// backend, then clears all local storage and in-memory state, and signs out.
   ///
-  /// Callers should navigate to the sign-in screen after this returns.
+  /// The auth state change triggers navigation to the sign-in screen
+  /// automatically — callers do not need to navigate manually.
   Future<void> deleteAccount() async {
+    isDeleting = true;
+    notifyListeners();
     _cancelTrainingWatch();
     try {
       final token = await FirebaseAuth.instance.currentUser?.getIdToken();
@@ -616,8 +620,9 @@ class LogViewModel extends ChangeNotifier {
     session.clear();
     localSetCount = 0;
     lastActionMessage = null;
+    isDeleting = false;
+    notifyListeners(); // must come before signOut — VM may be disposed after
     await FirebaseAuth.instance.signOut();
-    notifyListeners();
   }
 
   /// Permanently wipes all local sets and the Firestore collection so data
