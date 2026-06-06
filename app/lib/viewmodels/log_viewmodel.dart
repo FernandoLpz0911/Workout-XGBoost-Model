@@ -616,6 +616,7 @@ class LogViewModel extends ChangeNotifier {
     session.clear();
     localSetCount = 0;
     lastActionMessage = null;
+    await FirebaseAuth.instance.signOut();
     notifyListeners();
   }
 
