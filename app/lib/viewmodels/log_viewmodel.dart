@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
@@ -112,6 +114,7 @@ class LogViewModel extends ChangeNotifier {
 
   bool _isPremium = false;
   SharedPreferences? _prefs;
+  StreamSubscription<DocumentSnapshot>? _trainingStatusSub;
 
   /// Cached result of grouping [history] by date — rebuilt only when history
   /// changes, not on every widget rebuild.
@@ -499,6 +502,11 @@ class LogViewModel extends ChangeNotifier {
   }
 
   /// Exports local data as CSV and POSTs to the cloud ``/train`` endpoint.
+  ///
+  /// Returns immediately once the upload is accepted (HTTP 200). Training runs
+  /// in the background on the server; a Firestore listener on
+  /// ``trainingStatus/current`` updates [lastActionMessage] when it completes
+  /// or fails.
   Future<void> trainOnLocalData() async {
     isTraining = true;
     lastActionMessage = null;
@@ -512,15 +520,54 @@ class LogViewModel extends ChangeNotifier {
       final bytes = await _storage.exportAsCsvBytes();
       await _api.trainFromCsvBytes(bytes, authToken: token);
       AnalyticsService.logCloudRetrain();
-      lastActionMessage =
-          'Cloud model retrained on $localSetCount sets. '
-          'Local recommendations already use all your data automatically.';
+      lastActionMessage = 'Training queued — you\'ll be notified when complete.';
+      _watchTrainingStatus();
     } catch (e) {
       lastActionMessage = 'Training failed: $e';
     } finally {
       isTraining = false;
       notifyListeners();
     }
+  }
+
+  /// Listens to ``trainingStatus/current`` in Firestore and updates
+  /// [lastActionMessage] when the background job finishes or fails.
+  /// Cancels itself once a terminal status is received.
+  void _watchTrainingStatus() {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) return;
+    _trainingStatusSub?.cancel();
+    _trainingStatusSub = FirebaseFirestore.instance
+        .collection('users')
+        .doc(uid)
+        .collection('trainingStatus')
+        .doc('current')
+        .snapshots()
+        .listen(
+      (snap) {
+        if (!snap.exists) return;
+        final status = snap.data()?['status'] as String?;
+        if (status == 'complete') {
+          lastActionMessage =
+              'Cloud model trained successfully. '
+              'Tap an exercise to get updated recommendations.';
+          _trainingStatusSub?.cancel();
+          _trainingStatusSub = null;
+          notifyListeners();
+        } else if (status == 'failed') {
+          final error =
+              snap.data()?['error'] as String? ?? 'Unknown error';
+          lastActionMessage = 'Cloud training failed: $error';
+          _trainingStatusSub?.cancel();
+          _trainingStatusSub = null;
+          notifyListeners();
+        }
+      },
+      onError: (_) {
+        _trainingStatusSub?.cancel();
+        _trainingStatusSub = null;
+      },
+    );
   }
 
   /// Permanently wipes all local sets and the Firestore collection so data
@@ -612,6 +659,12 @@ class LogViewModel extends ChangeNotifier {
       final id = LocalStorageService.fingerprintFor(set);
       await col.doc(id).delete();
     } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _trainingStatusSub?.cancel();
+    super.dispose();
   }
 
   static String _fmtDate(DateTime d) =>

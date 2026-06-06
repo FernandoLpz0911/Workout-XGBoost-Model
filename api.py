@@ -12,6 +12,7 @@ Every route requires a Firebase ID token in ``Authorization: Bearer <token>``.
 import io
 import os
 import time
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import firebase_admin
@@ -50,8 +51,12 @@ _gcs_client = gcs.Client()
 
 # In-process FIFO cache for loaded models. Capped so Cloud Run memory stays
 # bounded regardless of how many distinct users are active on one instance.
+# Entries expire after _MODEL_CACHE_TTL seconds so retraining propagates to
+# all Cloud Run instances within that window.
 _CACHE_MAX = 50
+_MODEL_CACHE_TTL = 300.0  # 5 minutes — balances GCS load vs. post-train staleness
 _model_cache: dict[str, tuple] = {}
+_model_loaded_at: dict[str, float] = {}
 
 # Per-UID premium flag cached to avoid a Firestore read on every request.
 # 60-second TTL means a just-cancelled subscription stays effective briefly,
@@ -59,6 +64,10 @@ _model_cache: dict[str, tuple] = {}
 _PREMIUM_TTL = 60.0
 _PREMIUM_CACHE_MAX = 500
 _premium_cache: dict[str, tuple[bool, float]] = {}
+
+# If the server that claimed a training slot crashes before finishing,
+# the lock stays "training" in Firestore. Allow reclaim after this window.
+_TRAIN_LOCK_TTL = timedelta(minutes=10)
 
 
 def _gcs_prefix(uid: str) -> str:
@@ -68,7 +77,9 @@ def _gcs_prefix(uid: str) -> str:
 def _evict_model_cache() -> None:
     """Drop the oldest entry when the model cache is at capacity."""
     if len(_model_cache) >= _CACHE_MAX:
-        del _model_cache[next(iter(_model_cache))]
+        oldest_uid = next(iter(_model_cache))
+        del _model_cache[oldest_uid]
+        _model_loaded_at.pop(oldest_uid, None)
 
 
 def _training_status_ref(uid: str):
@@ -105,12 +116,22 @@ def _save_user_model(
 
     _evict_model_cache()
     _model_cache[uid] = (model, feature_cols, summary)
+    _model_loaded_at[uid] = time.monotonic()
 
 
 def _load_user_model(uid: str) -> tuple | None:
-    """Return ``(model, feature_cols, summary)`` from cache or GCS, or None if untrained."""
+    """Return ``(model, feature_cols, summary)`` from cache or GCS, or None if untrained.
+
+    Cached entries expire after ``_MODEL_CACHE_TTL`` seconds. This bounds staleness
+    across Cloud Run instances after a user retrains — the new model propagates to
+    all instances within one TTL window.
+    """
     if uid in _model_cache:
-        return _model_cache[uid]
+        age = time.monotonic() - _model_loaded_at.get(uid, 0.0)
+        if age < _MODEL_CACHE_TTL:
+            return _model_cache[uid]
+        del _model_cache[uid]
+        _model_loaded_at.pop(uid, None)
     try:
         bucket = _gcs_client.bucket(_GCS_BUCKET)
         prefix = _gcs_prefix(uid)
@@ -126,6 +147,7 @@ def _load_user_model(uid: str) -> tuple | None:
         summary = pd.read_csv(io.BytesIO(csv_bytes), parse_dates=["Date"])
         _evict_model_cache()
         _model_cache[uid] = (model, feature_cols, summary)
+        _model_loaded_at[uid] = time.monotonic()
         return _model_cache[uid]
     except Exception:  # noqa: BLE001
         return None
@@ -218,8 +240,17 @@ async def train_model(
     @gcp_firestore.transactional
     def _claim(transaction):
         snap = ref.get(transaction=transaction)
-        if snap.exists and snap.to_dict().get("status") == "training":
-            return False
+        if snap.exists:
+            doc = snap.to_dict()
+            if doc.get("status") == "training":
+                started = doc.get("startedAt")
+                # Allow reclaim if the slot is older than _TRAIN_LOCK_TTL.
+                # A missing or recent timestamp means training is active — block.
+                if started is None:
+                    return False
+                age = datetime.now(timezone.utc) - started
+                if age < _TRAIN_LOCK_TTL:
+                    return False
         transaction.set(ref, {
             "status": "training",
             "startedAt": admin_firestore.SERVER_TIMESTAMP,

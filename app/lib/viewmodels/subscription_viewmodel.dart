@@ -16,6 +16,7 @@ class SubscriptionViewModel extends ChangeNotifier {
   bool _isLoading = false;
   List<ProductDetails> _products = [];
   String? _error;
+  SharedPreferences? _prefs;
 
   bool get isPremium => _isPremium;
   bool get isLoading => _isLoading;
@@ -31,8 +32,8 @@ class SubscriptionViewModel extends ChangeNotifier {
 
     // Load cached value immediately so premium users see the right UI
     // before the async Firestore check completes.
-    final prefs = await SharedPreferences.getInstance();
-    _isPremium = prefs.getBool(_premiumCacheKey) ?? false;
+    _prefs = await SharedPreferences.getInstance();
+    _isPremium = _prefs!.getBool(_premiumCacheKey) ?? false;
     notifyListeners();
 
     try {
@@ -92,7 +93,7 @@ class SubscriptionViewModel extends ChangeNotifier {
 
   Future<void> _setPremium(bool value) async {
     _isPremium = value;
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
     await prefs.setBool(_premiumCacheKey, value);
     notifyListeners();
   }
