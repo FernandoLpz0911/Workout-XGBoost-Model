@@ -2,7 +2,7 @@
 
 Endpoints
 ---------
-POST   /train       Retrain the user's XGBoost model from a CSV (premium).
+POST   /train             Retrain the user's XGBoost model from a CSV.
 GET    /exercises         List exercises from the user's training history.
 POST   /recommend         Return an AI weight/rep target for a given exercise.
 DELETE /delete-user-data  Wipe all cloud data and the Firebase Auth account.
@@ -65,13 +65,6 @@ _MAX_CSV_BYTES = 50 * 1024 * 1024  # 50 MB hard cap on training uploads
 _MODEL_CACHE_TTL = 300.0  # seconds; bounds post-retrain cross-instance staleness
 _model_cache: dict[str, tuple] = {}
 _model_loaded_at: dict[str, float] = {}
-
-# Per-UID premium flag cached to avoid a Firestore read on every request.
-# 60-second TTL means a just-cancelled subscription stays effective briefly,
-# which is acceptable given the low monetary impact.
-_PREMIUM_TTL = 60.0
-_PREMIUM_CACHE_MAX = 500
-_premium_cache: dict[str, tuple[bool, float]] = {}
 
 # If the server that claimed a training slot crashes before finishing,
 # the lock stays "training" in Firestore. Allow reclaim after this window.
@@ -189,38 +182,6 @@ def get_uid(authorization: Optional[str] = Header(None)) -> str:
         raise HTTPException(401, f"Invalid token: {exc}") from exc
 
 
-def require_premium(uid: str = Depends(get_uid)) -> str:
-    """FastAPI dependency — ensure the caller has an active Premium subscription.
-
-    Results are cached per UID for ``_PREMIUM_TTL`` seconds to avoid a
-    Firestore round-trip on every request.
-    """
-    now = time.monotonic()
-    cached = _premium_cache.get(uid)
-    if cached is not None and now < cached[1]:
-        if not cached[0]:
-            raise HTTPException(403, "Active Premium subscription required.")
-        return uid
-    db = admin_firestore.client()
-    doc = db.collection("users").document(uid).get()
-    if not doc.exists:
-        raise HTTPException(403, "No user record found.")
-    data = doc.to_dict()
-    is_premium = data.get("subscriptionStatus") == "active"
-    if is_premium:
-        expiry = data.get("subscriptionExpiry")
-        if expiry is not None:
-            expiry_dt = expiry.astimezone(timezone.utc) if hasattr(expiry, "astimezone") else None
-            if expiry_dt is not None and expiry_dt < datetime.now(timezone.utc):
-                is_premium = False
-    if len(_premium_cache) >= _PREMIUM_CACHE_MAX:
-        del _premium_cache[next(iter(_premium_cache))]
-    _premium_cache[uid] = (is_premium, now + _PREMIUM_TTL)
-    if not is_premium:
-        raise HTTPException(403, "Active Premium subscription required.")
-    return uid
-
-
 def _run_train(uid: str, csv_bytes: bytes) -> None:
     """Run the ML pipeline and persist the result to GCS.
 
@@ -257,7 +218,7 @@ def _run_train(uid: str, csv_bytes: bytes) -> None:
 async def train_model(
     background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
-    uid: str = Depends(require_premium),
+    uid: str = Depends(get_uid),
 ):
     """Accept a CSV upload and queue a background model retrain.
 
@@ -485,7 +446,6 @@ def delete_user_data(uid: str = Depends(get_uid)):
     """
     _model_cache.pop(uid, None)
     _model_loaded_at.pop(uid, None)
-    _premium_cache.pop(uid, None)
 
     try:
         bucket = _gcs_client.bucket(_GCS_BUCKET)

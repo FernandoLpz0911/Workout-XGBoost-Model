@@ -1,24 +1,16 @@
 import 'dart:async';
 
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
-import 'package:repiq/services/analytics_service.dart';
-import 'package:repiq/services/api_service.dart';
 import 'package:repiq/services/local_recommendation_engine.dart';
 import 'package:repiq/services/local_storage_service.dart';
 import 'package:repiq/services/notification_service.dart';
 
 export '../models/recommendation_models.dart' show TrainingMode;
 
-/// Parameters passed to the recommendation isolate for one exercise.
-///
-/// Only the target exercise's sets are serialized to bound transfer cost
-/// relative to full history size.
 class _RecParams {
   final String exercise;
   final String category;
@@ -37,37 +29,24 @@ Recommendation _computeRec(_RecParams p) {
   );
 }
 
-/// Broad category of an exercise, used to route UI and recommendation logic.
 enum ExerciseType { strength, cardio, passive }
 
-/// Maps a FitNotes category string to an [ExerciseType].
 ExerciseType exerciseTypeOf(String category) {
   if (category == 'Cardio') return ExerciseType.cardio;
   if (category == 'Passive') return ExerciseType.passive;
   return ExerciseType.strength;
 }
 
-/// One exercise added to the current session, along with its logged sets and
-/// the most recent recommendation.
 class SessionExercise {
   final String exercise;
   final String category;
 
-  /// Whether this exercise is being trained for hypertrophy or absolute strength.
-  /// Persists across sessions via [LogViewModel].
   TrainingMode trainingMode;
 
-  /// Local AI recommendation. Null until computed, or for non-strength exercises.
   Recommendation? recommendation;
 
-  /// Cloud XGBoost recommendation — non-null for premium users who have trained
-  /// a model. Takes precedence over [recommendation] in the UI when available.
-  Recommendation? cloudRecommendation;
-
-  /// Non-null when recommendation computation failed.
   String? recError;
 
-  /// Human-readable summary of the last cardio or passive session.
   String? lastSessionSummary;
 
   final List<WorkoutSet> sets = [];
@@ -79,52 +58,30 @@ class SessionExercise {
   });
 }
 
-/// Central state manager for the app (Provider / [ChangeNotifier]).
-///
-/// Owns:
-/// - The full [history] of logged sets (loaded from [LocalStorageService])
-/// - The current workout [session] (today's exercises and their logged sets)
-/// - The [exerciseDict] used to populate category/exercise pickers
-/// - Per-exercise [TrainingMode] preferences
-/// - Loading and error state for import and cloud training operations
 class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
-  final _api = ApiService();
   final _storage = LocalStorageService();
 
-  /// Category → sorted exercise name list, built from history + presets.
   Map<String, List<String>> exerciseDict = {};
   bool isDictLoading = true;
 
-  /// Exercises added to today's session, in the order they were added.
   final List<SessionExercise> session = [];
 
-  /// Full workout history, sorted newest-first.
   List<WorkoutSet> history = [];
   bool isHistoryLoading = false;
 
-  bool isTraining = false;
   bool isImporting = false;
   bool isDeleting = false;
 
-  /// Result message from the last import or cloud training action.
   String? lastActionMessage;
 
-  /// Total number of sets currently stored on-device.
   int localSetCount = 0;
 
   Map<String, TrainingMode> _trainingModes = {};
 
-  bool _isPremium = false;
   SharedPreferences? _prefs;
-  StreamSubscription<DocumentSnapshot>? _trainingStatusSub;
-  StreamSubscription<User?>? _authSub;
-  Timer? _trainingTimeoutTimer;
 
-  /// Cached result of grouping [history] by date — rebuilt only when history
-  /// changes, not on every widget rebuild.
   Map<String, List<WorkoutSet>>? _historyByDateCache;
 
-  /// Built-in exercise list shown even before the user has any history.
   static const _presetExercises = <String, List<String>>{
     'Back': [
       'Barbell Row', 'Deadlift', 'Face Pull', 'Hyperextension',
@@ -174,23 +131,17 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   static final _alwaysCategories = _presetExercises.keys.toSet();
 
+  static const _sessionOrderKey = 'session_order_v1';
+  static const _sessionOrderDateKey = 'session_order_date_v1';
+
   LogViewModel() {
     WidgetsBinding.instance.addObserver(this);
-    _authSub = FirebaseAuth.instance.authStateChanges().listen((user) {
-      if (user == null) _cancelTrainingWatch();
-    });
     _initialize();
   }
 
-  /// Called by [_AppRoot] whenever [SubscriptionViewModel.isPremium] changes.
-  void updatePremiumStatus(bool premium) => _isPremium = premium;
-
-  /// Returns the saved [TrainingMode] for [exercise], defaulting to hypertrophy.
   TrainingMode trainingModeFor(String exercise) =>
       _trainingModes[exercise] ?? TrainingMode.hypertrophy;
 
-  /// Updates the training mode for the exercise at [index], persists it, and
-  /// immediately recomputes the recommendation.
   void setTrainingMode(int index, TrainingMode mode) {
     session[index].trainingMode = mode;
     _trainingModes[session[index].exercise] = mode;
@@ -199,21 +150,17 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  /// All categories, combining history and presets, sorted alphabetically.
   List<String> get allCategories {
     final cats = <String>{...exerciseDict.keys, ..._alwaysCategories};
     return cats.toList()..sort();
   }
 
-  /// Sorted exercise names for [category], merging history and presets.
   List<String> exercisesFor(String category) {
     final fromHistory = exerciseDict[category] ?? <String>[];
     final presets = _presetExercises[category] ?? <String>[];
     return <String>{...fromHistory, ...presets}.toList()..sort();
   }
 
-  /// Consecutive calendar days with at least one set logged, ending today or
-  /// yesterday (yesterday counts so a streak isn't broken before the gym opens).
   int get currentStreak {
     if (history.isEmpty) return 0;
     final today = DateTime.now();
@@ -231,8 +178,6 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     return streak;
   }
 
-  /// History grouped by date string (``"YYYY-MM-DD"``), sorted newest-first.
-  /// Cached and only rebuilt when history actually changes.
   Map<String, List<WorkoutSet>> get historyByDate {
     if (_historyByDateCache != null) return _historyByDateCache!;
     final grouped = <String, List<WorkoutSet>>{};
@@ -255,7 +200,6 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _loadTodaySession();
     isDictLoading = false;
     notifyListeners();
-    _syncFromFirestore();
   }
 
   Future<void> _loadTrainingModes() async {
@@ -282,14 +226,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
-  /// Restores any exercises already logged today so a mid-session app restart
-  /// doesn't lose the current session. Preserves existing cloud recommendations
-  /// across rebuilds triggered by Firestore sync.
   void _loadTodaySession() {
-    final savedCloudRecs = {
-      for (final e in session)
-        if (e.cloudRecommendation != null) e.exercise: e.cloudRecommendation!
-    };
     session.clear();
     final today = _fmtDate(DateTime.now());
     final todaySets = history
@@ -307,16 +244,53 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
           trainingMode: trainingModeFor(s.exercise),
         );
         _applyRec(ex);
-        ex.cloudRecommendation = savedCloudRecs[s.exercise];
         session.add(ex);
         idx = session.length - 1;
       }
       session[idx].sets.add(s);
     }
+
+    final prefs = _prefs;
+    if (prefs != null && prefs.getString(_sessionOrderDateKey) == today) {
+      final savedOrder = prefs.getStringList(_sessionOrderKey) ?? [];
+      for (final entry in savedOrder) {
+        final sep = entry.indexOf('|||');
+        if (sep == -1) continue;
+        final exercise = entry.substring(0, sep);
+        final category = entry.substring(sep + 3);
+        if (!session.any((e) => e.exercise == exercise && e.category == category)) {
+          final ex = SessionExercise(
+            exercise: exercise,
+            category: category,
+            trainingMode: trainingModeFor(exercise),
+          );
+          _applyRec(ex);
+          session.add(ex);
+        }
+      }
+      if (savedOrder.isNotEmpty) {
+        session.sort((a, b) {
+          final aKey = '${a.exercise}|||${a.category}';
+          final bKey = '${b.exercise}|||${b.category}';
+          final ai = savedOrder.indexOf(aKey);
+          final bi = savedOrder.indexOf(bKey);
+          if (ai == -1 && bi == -1) return 0;
+          if (ai == -1) return 1;
+          if (bi == -1) return -1;
+          return ai.compareTo(bi);
+        });
+      }
+    }
   }
 
-  /// Kicks off recommendation computation in a background isolate, then chains
-  /// a cloud XGBoost attempt for premium users.
+  void _saveSessionOrder() async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    final today = _fmtDate(DateTime.now());
+    final order = session.map((e) => '${e.exercise}|||${e.category}').toList();
+    await prefs.setString(_sessionOrderDateKey, today);
+    await prefs.setStringList(_sessionOrderKey, order);
+  }
+
   void _applyRec(SessionExercise ex) {
     if (exerciseTypeOf(ex.category) == ExerciseType.strength) {
       final params = _RecParams(
@@ -332,7 +306,6 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
         if (!hasListeners) return;
         ex.recommendation = rec;
         notifyListeners();
-        _tryCloudRec(ex);
       }).catchError((_) {
         if (!hasListeners) return;
         ex.recError = 'Could not compute recommendation.';
@@ -341,26 +314,6 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     } else {
       ex.lastSessionSummary = _lastSessionSummary(ex.exercise, ex.category);
     }
-  }
-
-  /// Fetches a cloud XGBoost recommendation. Skipped for free users so no
-  /// HTTP round-trip is wasted on a guaranteed 403.
-  void _tryCloudRec(SessionExercise ex) async {
-    if (!_isPremium) return;
-    try {
-      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
-      if (token == null) return;
-      final mode = trainingModeFor(ex.exercise) == TrainingMode.strength
-          ? 'strength'
-          : 'hypertrophy';
-      final cloud = await _api.getRecommendation(
-          ex.exercise, ex.category, authToken: token, mode: mode);
-      if (cloud != null) {
-        ex.cloudRecommendation = cloud;
-        if (!hasListeners) return;
-        notifyListeners();
-      }
-    } catch (_) {}
   }
 
   String _lastSessionSummary(String exercise, String category) {
@@ -382,8 +335,6 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     return dur != null ? 'Last session: $dur' : '';
   }
 
-  /// Adds [exercise] to the current session if not already present and kicks
-  /// off its recommendation computation.
   void addExercise(String category, String exercise) {
     if (session.any(
         (e) => e.exercise == exercise && e.category == category)) {
@@ -396,13 +347,10 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     );
     _applyRec(ex);
     session.add(ex);
-    if (session.length == 1) AnalyticsService.logSessionStarted();
-    AnalyticsService.logExerciseAdded(exercise);
+    _saveSessionOrder();
     notifyListeners();
   }
 
-  /// Appends [set] to the session, persists it, syncs to Firestore, and
-  /// reschedules the 3-day workout reminder notification.
   void logSet(int exerciseIndex, WorkoutSet set) {
     session[exerciseIndex].sets.add(set);
     history.insert(0, set);
@@ -410,21 +358,9 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     localSetCount++;
     notifyListeners();
     _storage.appendSets([set]);
-    _syncSetToFirestore(set);
-    AnalyticsService.logSetLogged(set.exercise);
     _scheduleReminderIfNeeded();
-    _maybeLogStreakMilestone();
   }
 
-  void _maybeLogStreakMilestone() {
-    final s = currentStreak;
-    if (s == 3 || s == 7 || s == 14 || s == 30) {
-      AnalyticsService.logStreakMilestone(s);
-    }
-  }
-
-  /// Schedules the 3-day workout reminder at most once per calendar day so
-  /// logging many sets in one session doesn't cancel and reschedule repeatedly.
   void _scheduleReminderIfNeeded() async {
     final prefs = _prefs ??= await SharedPreferences.getInstance();
     final today = _fmtDate(DateTime.now());
@@ -433,7 +369,6 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     NotificationService.scheduleWorkoutReminder();
   }
 
-  /// Removes the set at [setIndex] from the session and from storage.
   void removeSet(int exerciseIndex, int setIndex) {
     final set = session[exerciseIndex].sets.removeAt(setIndex);
     history.removeWhere((s) =>
@@ -443,10 +378,8 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     localSetCount--;
     notifyListeners();
     _storage.deleteSet(set);
-    _syncDeleteFromFirestore(set);
   }
 
-  /// Replaces the set at [setIndex] with [updated], persists, and re-syncs.
   void updateSet(int exerciseIndex, int setIndex, WorkoutSet updated) {
     final old = session[exerciseIndex].sets[setIndex];
     session[exerciseIndex].sets[setIndex] = updated;
@@ -458,12 +391,8 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _applyRec(session[exerciseIndex]);
     notifyListeners();
     _storage.updateSet(old, updated);
-    _syncDeleteFromFirestore(old);
-    _syncSetToFirestore(updated);
   }
 
-  /// Removes an exercise and all its sets from the session, in-memory history,
-  /// local storage, and Firestore.
   void removeExercise(int index) {
     final sets = List<WorkoutSet>.from(session[index].sets);
     session.removeAt(index);
@@ -472,10 +401,10 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
           h.date.millisecondsSinceEpoch == s.date.millisecondsSinceEpoch &&
           h.exercise == s.exercise);
       _storage.deleteSet(s);
-      _syncDeleteFromFirestore(s);
     }
     _invalidateHistoryCache();
     localSetCount -= sets.length;
+    _saveSessionOrder();
     notifyListeners();
   }
 
@@ -495,7 +424,6 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Parses [csvText] as a FitNotes export and merges new rows into storage.
   Future<void> importCsvText(String csvText) async {
     isImporting = true;
     lastActionMessage = null;
@@ -505,7 +433,6 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
       await _loadHistory();
       _rebuildDict();
       _loadTodaySession();
-      AnalyticsService.logCsvImported(count);
       lastActionMessage = 'Imported $count sets from CSV.';
       if (count > 0) NotificationService.scheduleWorkoutReminder();
     } catch (e) {
@@ -516,145 +443,17 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  /// Exports local data as CSV and POSTs to the cloud ``/train`` endpoint.
-  ///
-  /// Returns immediately once the upload is accepted (HTTP 200). Training runs
-  /// in the background on the server; a Firestore listener on
-  /// ``trainingStatus/current`` updates [lastActionMessage] when it completes
-  /// or fails.
-  Future<void> trainOnLocalData() async {
-    isTraining = true;
-    lastActionMessage = null;
-    notifyListeners();
-    try {
-      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
-      if (token == null) {
-        lastActionMessage = 'Sign in required to retrain the cloud model.';
-        return;
-      }
-      final bytes = await _storage
-          .exportAsCsvBytes()
-          .timeout(const Duration(minutes: 2));
-      const maxBytes = 50 * 1024 * 1024;
-      if (bytes.length > maxBytes) {
-        lastActionMessage =
-            'Local data exceeds the 50 MB upload limit. '
-            'Try clearing old sets before retraining.';
-        return;
-      }
-      await _api.trainFromCsvBytes(bytes, authToken: token);
-      AnalyticsService.logCloudRetrain();
-      lastActionMessage = 'Training queued — you\'ll be notified when complete.';
-      _watchTrainingStatus();
-    } catch (e) {
-      lastActionMessage = 'Training failed: $e';
-    } finally {
-      isTraining = false;
-      notifyListeners();
-    }
-  }
-
-  /// Listens to ``trainingStatus/current`` in Firestore and updates
-  /// [lastActionMessage] when the background job finishes or fails.
-  ///
-  /// Guards against stale docs by requiring a ``"training"`` event before
-  /// reacting to ``"complete"`` or ``"failed"`` — prevents a previous run's
-  /// terminal status from firing immediately on a fresh watch.
-  ///
-  /// Cancels automatically on a terminal status or after 15 minutes.
-  void _watchTrainingStatus() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return;
-    _cancelTrainingWatch();
-
-    var seenTraining = false;
-
-    _trainingStatusSub = FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('trainingStatus')
-        .doc('current')
-        .snapshots()
-        .listen(
-      (snap) {
-        if (!snap.exists) return;
-        final status = snap.data()?['status'] as String?;
-        if (status == 'training') {
-          seenTraining = true;
-          return;
-        }
-        if (!seenTraining) return;
-        if (status == 'complete') {
-          lastActionMessage =
-              'Cloud model trained successfully. '
-              'Tap an exercise to get updated recommendations.';
-          _cancelTrainingWatch();
-          if (!hasListeners) return;
-          notifyListeners();
-        } else if (status == 'failed') {
-          final error =
-              snap.data()?['error'] as String? ?? 'Unknown error';
-          lastActionMessage = 'Cloud training failed: $error';
-          _cancelTrainingWatch();
-          if (!hasListeners) return;
-          notifyListeners();
-        }
-      },
-      onError: (_) => _cancelTrainingWatch(),
-    );
-
-    _trainingTimeoutTimer = Timer(const Duration(minutes: 15), () {
-      if (_trainingStatusSub != null) {
-        lastActionMessage =
-            'Cloud training is taking longer than expected. '
-            'Check back later.';
-        _cancelTrainingWatch();
-        if (!hasListeners) return;
-        notifyListeners();
-      }
-    });
-  }
-
-  void _cancelTrainingWatch() {
-    _trainingStatusSub?.cancel();
-    _trainingStatusSub = null;
-    _trainingTimeoutTimer?.cancel();
-    _trainingTimeoutTimer = null;
-  }
-
-  /// Deletes all cloud data (GCS, Firestore, Firebase Auth account) via the
-  /// backend, then clears all local storage and in-memory state, and signs out.
-  ///
-  /// The auth state change triggers navigation to the sign-in screen
-  /// automatically — callers do not need to navigate manually.
-  Future<void> deleteAccount() async {
-    isDeleting = true;
-    notifyListeners();
-    _cancelTrainingWatch();
-    try {
-      final token = await FirebaseAuth.instance.currentUser?.getIdToken();
-      if (token != null) {
-        await _api.deleteUserData(authToken: token);
-      }
-    } catch (e) {
-      lastActionMessage = 'Cloud deletion failed: $e. '
-          'Check your connection and try again.';
-      isDeleting = false;
-      notifyListeners();
-      return;
-    }
+  Future<void> clearLocalData() async {
     await _storage.clear();
     NotificationService.cancelWorkoutReminder();
     final prefs = _prefs ??= await SharedPreferences.getInstance();
-    await prefs.clear();
-    history.clear();
-    _invalidateHistoryCache();
+    await prefs.remove('last_firestore_sync_ms');
+    await prefs.remove(_sessionOrderKey);
+    await prefs.remove(_sessionOrderDateKey);
+    await _loadHistory();
+    _rebuildDict();
     session.clear();
-    localSetCount = 0;
-    lastActionMessage = null;
-    isDeleting = false;
-    notifyListeners(); // must come before signOut — VM may be disposed after
-    await FirebaseAuth.instance.signOut();
+    notifyListeners();
   }
 
   void dismissLastActionMessage() {
@@ -662,121 +461,9 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  /// Permanently wipes all local sets and the Firestore collection so data
-  /// does not re-sync on the next launch. Resets the sync timestamp accordingly.
-  Future<void> clearLocalData() async {
-    _cancelTrainingWatch();
-    await _storage.clear();
-    NotificationService.cancelWorkoutReminder();
-    try {
-      final col = _setsCollection();
-      if (col != null) {
-        final snap = await col.get();
-        const chunkSize = 400;
-        for (var i = 0; i < snap.docs.length; i += chunkSize) {
-          final batch = FirebaseFirestore.instance.batch();
-          for (final doc in snap.docs.skip(i).take(chunkSize)) {
-            batch.delete(doc.reference);
-          }
-          await batch.commit();
-        }
-      }
-    } catch (_) {}
-    final prefs = _prefs ??= await SharedPreferences.getInstance();
-    await prefs.remove('last_firestore_sync_ms');
-    await _loadHistory();
-    _rebuildDict();
-    session.clear();
-    notifyListeners();
-  }
-
-  CollectionReference<Map<String, dynamic>>? _setsCollection() {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
-    if (uid == null) return null;
-    return FirebaseFirestore.instance
-        .collection('users')
-        .doc(uid)
-        .collection('sets');
-  }
-
-  /// Pulls sets from Firestore that are newer than the last sync timestamp.
-  /// On first run fetches everything. Fire-and-forget.
-  void _syncFromFirestore() async {
-    try {
-      final col = _setsCollection();
-      if (col == null) return;
-
-      final prefs = _prefs ??= await SharedPreferences.getInstance();
-      final lastMs = prefs.getInt('last_firestore_sync_ms');
-
-      final Query<Map<String, dynamic>> query = lastMs == null
-          ? col.limit(500)
-          : col
-              .where('createdAt',
-                  isGreaterThan: Timestamp.fromMillisecondsSinceEpoch(lastMs))
-              .limit(500);
-
-      final snap = await query.get();
-
-      int? maxCreatedAtMs;
-      if (snap.docs.isNotEmpty) {
-        final remoteSets =
-            snap.docs.map((d) => WorkoutSet.fromJson(d.data())).toList();
-        for (final doc in snap.docs) {
-          final ts = doc.data()['createdAt'];
-          if (ts is Timestamp) {
-            final ms = ts.millisecondsSinceEpoch;
-            if (maxCreatedAtMs == null || ms > maxCreatedAtMs) {
-              maxCreatedAtMs = ms;
-            }
-          }
-        }
-        await _storage.appendSets(remoteSets);
-        final newCount = await _storage.count();
-        if (newCount != localSetCount) {
-          await _loadHistory();
-          _rebuildDict();
-          _loadTodaySession();
-          notifyListeners();
-        }
-      }
-
-      await prefs.setInt('last_firestore_sync_ms',
-          maxCreatedAtMs ?? DateTime.now().millisecondsSinceEpoch);
-    } catch (_) {}
-  }
-
-  void _syncSetToFirestore(WorkoutSet set) async {
-    try {
-      final col = _setsCollection();
-      if (col == null) return;
-      final id = LocalStorageService.fingerprintFor(set);
-      await col.doc(id).set({
-        ...set.toJson(),
-        'createdAt': FieldValue.serverTimestamp(),
-      });
-    } catch (_) {}
-  }
-
-  void _syncDeleteFromFirestore(WorkoutSet set) async {
-    try {
-      final col = _setsCollection();
-      if (col == null) return;
-      final id = LocalStorageService.fingerprintFor(set);
-      await col.doc(id).delete();
-    } catch (_) {}
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) _syncFromFirestore();
-  }
-
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _authSub?.cancel();
-    _cancelTrainingWatch();
     super.dispose();
   }
 
