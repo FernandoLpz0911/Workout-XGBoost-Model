@@ -4,8 +4,6 @@ import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/rest_timer.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
-import 'package:repiq/viewmodels/subscription_viewmodel.dart';
-import 'package:repiq/views/paywall_view.dart';
 
 export 'package:repiq/viewmodels/log_viewmodel.dart' show TrainingMode;
 
@@ -182,17 +180,11 @@ class _ExerciseCard extends StatelessWidget {
               const SizedBox(height: 10),
               _TrainingModeToggle(
                 mode: ex.trainingMode,
-                isPremium: context.watch<SubscriptionViewModel>().isPremium,
                 onChanged: (mode) => vm.setTrainingMode(index, mode),
-                onUpgrade: () => PaywallView.show(context, source: 'log_rec'),
               ),
             ],
             const SizedBox(height: 12),
-            _RecBanner(
-              ex: ex,
-              isPremium: context.watch<SubscriptionViewModel>().isPremium,
-              onUpgrade: () => PaywallView.show(context, source: 'log_rec'),
-            ),
+            _RecBanner(ex: ex),
             if (ex.sets.isNotEmpty) ...[
               const SizedBox(height: 12),
               const Divider(),
@@ -285,13 +277,7 @@ class _ExerciseCard extends StatelessWidget {
 
 class _RecBanner extends StatelessWidget {
   final SessionExercise ex;
-  final bool isPremium;
-  final VoidCallback onUpgrade;
-  const _RecBanner({
-    required this.ex,
-    required this.isPremium,
-    required this.onUpgrade,
-  });
+  const _RecBanner({required this.ex});
 
   @override
   Widget build(BuildContext context) {
@@ -310,12 +296,8 @@ class _RecBanner extends StatelessWidget {
           icon: Icons.info_outline,
           text: ex.recError!);
     }
-    final localRec = ex.recommendation;
-    final cloudRec = ex.cloudRecommendation;
-    final rec = cloudRec ?? localRec;
+    final rec = ex.recommendation;
     if (rec == null) return const SizedBox.shrink();
-
-    final isCloud = cloudRec != null;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -323,76 +305,39 @@ class _RecBanner extends StatelessWidget {
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: (isCloud ? Colors.greenAccent : Colors.blue)
-                .withValues(alpha: 0.12),
+            color: Colors.blue.withValues(alpha: 0.12),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
             children: [
-              Icon(isCloud ? Icons.model_training : Icons.auto_awesome,
-                  color: isCloud ? Colors.greenAccent : Colors.blue,
-                  size: 18),
+              const Icon(Icons.auto_awesome, color: Colors.blue, size: 18),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '3 × ${rec.targetReps} reps  @  '
-                            '${rec.targetWeight.toStringAsFixed(1)} lbs',
-                            style: const TextStyle(
-                                fontWeight: FontWeight.bold, fontSize: 15),
-                          ),
-                        ),
-                        if (isCloud)
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.greenAccent.withValues(alpha: 0.2),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: const Text('AI Model',
-                                style: TextStyle(
-                                    color: Colors.greenAccent,
-                                    fontSize: 10,
-                                    fontWeight: FontWeight.bold)),
-                          ),
-                      ],
+                    Text(
+                      '3 × ${rec.targetReps} reps  @  '
+                      '${rec.targetWeight.toStringAsFixed(1)} lbs',
+                      style: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                     const SizedBox(height: 2),
                     Text(rec.status,
-                        style: TextStyle(
-                            fontSize: 12,
-                            color: isCloud
-                                ? Colors.greenAccent
-                                : Colors.blueAccent)),
+                        style: const TextStyle(
+                            fontSize: 12, color: Colors.blueAccent)),
                   ],
                 ),
               ),
             ],
           ),
         ),
-        if (isPremium && rec.notesInsight.isNotEmpty) ...[
+        if (rec.notesInsight.isNotEmpty) ...[
           const SizedBox(height: 8),
           _InfoChip(
               color: Colors.amber,
               icon: Icons.notes,
               text: rec.notesInsight),
-        ],
-        if (!isPremium) ...[
-          const SizedBox(height: 8),
-          GestureDetector(
-            onTap: onUpgrade,
-            child: _InfoChip(
-              color: Colors.purple,
-              icon: Icons.lock_outline,
-              text: 'Premium: form & fatigue analysis, advanced AI insights',
-            ),
-          ),
         ],
       ],
     );
@@ -976,41 +921,14 @@ class _StepBtn extends StatelessWidget {
 
 class _TrainingModeToggle extends StatelessWidget {
   final TrainingMode mode;
-  final bool isPremium;
   final void Function(TrainingMode) onChanged;
-  final VoidCallback onUpgrade;
   const _TrainingModeToggle({
     required this.mode,
-    required this.isPremium,
     required this.onChanged,
-    required this.onUpgrade,
   });
 
   @override
   Widget build(BuildContext context) {
-    if (!isPremium) {
-      return GestureDetector(
-        onTap: onUpgrade,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-          decoration: BoxDecoration(
-            color: Colors.purple.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.purple.withValues(alpha: 0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: const [
-              Icon(Icons.lock_outline, size: 14, color: Colors.purple),
-              SizedBox(width: 6),
-              Text('Training Mode — Premium feature',
-                  style: TextStyle(fontSize: 12, color: Colors.purple)),
-            ],
-          ),
-        ),
-      );
-    }
-
     return SegmentedButton<TrainingMode>(
       segments: const [
         ButtonSegment(

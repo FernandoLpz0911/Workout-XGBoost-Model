@@ -3,6 +3,7 @@ import 'dart:math';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:vibration/vibration.dart';
 
 /// Countdown rest timer with audio and vibration feedback.
@@ -25,7 +26,13 @@ class RestTimer extends ChangeNotifier {
   bool _autoStartEnabled = true;
   double _volume = 1.0;
 
+  SharedPreferences? _prefs;
+
   final _player = AudioPlayer();
+
+  RestTimer() {
+    _loadSettings();
+  }
 
   /// In-memory WAV bytes built once at construction — avoids bundling an asset.
   late final Uint8List _beepWav = _buildBeepWav();
@@ -48,24 +55,47 @@ class RestTimer extends ChangeNotifier {
   bool get autoStartEnabled => _autoStartEnabled;
   double get volume => _volume;
 
+  Future<void> _loadSettings() async {
+    _prefs = await SharedPreferences.getInstance();
+    totalSeconds = _prefs!.getInt('rest_timer_total_seconds') ?? 120;
+    _soundEnabled = _prefs!.getBool('rest_timer_sound') ?? true;
+    _vibrationEnabled = _prefs!.getBool('rest_timer_vibration') ?? true;
+    _autoStartEnabled = _prefs!.getBool('rest_timer_auto_start') ?? true;
+    _volume = _prefs!.getDouble('rest_timer_volume') ?? 1.0;
+    notifyListeners();
+  }
+
+  void _saveSettings() async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    await prefs.setInt('rest_timer_total_seconds', totalSeconds);
+    await prefs.setBool('rest_timer_sound', _soundEnabled);
+    await prefs.setBool('rest_timer_vibration', _vibrationEnabled);
+    await prefs.setBool('rest_timer_auto_start', _autoStartEnabled);
+    await prefs.setDouble('rest_timer_volume', _volume);
+  }
+
   set soundEnabled(bool v) {
     _soundEnabled = v;
+    _saveSettings();
     notifyListeners();
   }
 
   set vibrationEnabled(bool v) {
     _vibrationEnabled = v;
+    _saveSettings();
     notifyListeners();
   }
 
   set autoStartEnabled(bool v) {
     _autoStartEnabled = v;
+    _saveSettings();
     notifyListeners();
   }
 
   set volume(double v) {
     _volume = v;
     _player.setVolume(v);
+    _saveSettings();
     notifyListeners();
   }
 
@@ -109,6 +139,7 @@ class RestTimer extends ChangeNotifier {
     if (isRunning) {
       _remaining = (_remaining + delta).clamp(0, totalSeconds);
     }
+    _saveSettings();
     notifyListeners();
   }
 

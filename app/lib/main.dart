@@ -1,41 +1,20 @@
-import 'dart:ui';
-
-import 'package:firebase_analytics/firebase_analytics.dart';
-import 'package:firebase_core/firebase_core.dart';
-import 'package:firebase_crashlytics/firebase_crashlytics.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:repiq/firebase_options.dart';
 import 'package:repiq/services/notification_service.dart';
 import 'package:repiq/services/rest_timer.dart';
-import 'package:repiq/viewmodels/auth_viewmodel.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
-import 'package:repiq/viewmodels/subscription_viewmodel.dart';
 import 'package:repiq/views/history_view.dart';
 import 'package:repiq/views/log_view.dart';
 import 'package:repiq/views/onboarding_view.dart';
 import 'package:repiq/views/progress_view.dart';
 import 'package:repiq/views/settings_view.dart';
-import 'package:repiq/views/sign_in_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-
-  // Route all Flutter framework errors to Crashlytics.
-  FlutterError.onError = FirebaseCrashlytics.instance.recordFlutterFatalError;
-  // Route uncaught async errors (e.g. in isolates) to Crashlytics.
-  PlatformDispatcher.instance.onError = (error, stack) {
-    FirebaseCrashlytics.instance.recordError(error, stack, fatal: true);
-    return true;
-  };
-
   await NotificationService.init();
-
   runApp(const WorkoutApp());
 }
 
-/// Root widget. Initialises all providers and applies the app-wide dark theme.
 class WorkoutApp extends StatelessWidget {
   const WorkoutApp({super.key});
 
@@ -43,10 +22,8 @@ class WorkoutApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => AuthViewModel()),
         ChangeNotifierProvider(create: (_) => LogViewModel()),
         ChangeNotifierProvider(create: (_) => RestTimer()),
-        ChangeNotifierProvider(create: (_) => SubscriptionViewModel()),
       ],
       child: MaterialApp(
         title: 'RepIQ',
@@ -62,16 +39,12 @@ class WorkoutApp extends StatelessWidget {
           cardColor: const Color(0xFF262730),
           useMaterial3: true,
         ),
-        navigatorObservers: [
-          FirebaseAnalyticsObserver(analytics: FirebaseAnalytics.instance),
-        ],
         home: const _RootGate(),
       ),
     );
   }
 }
 
-/// Checks onboarding completion before routing to the auth gate.
 class _RootGate extends StatefulWidget {
   const _RootGate();
   @override
@@ -98,60 +71,10 @@ class _RootGateState extends State<_RootGate> {
     if (!_done!) {
       return OnboardingView(onComplete: () => setState(() => _done = true));
     }
-    return const _AuthGate();
+    return const _AppShell();
   }
 }
 
-/// Shows [SignInView] until the user is authenticated, then boots the main app
-/// and initialises the subscription state.
-class _AuthGate extends StatelessWidget {
-  const _AuthGate();
-
-  @override
-  Widget build(BuildContext context) {
-    final auth = context.watch<AuthViewModel>();
-    if (!auth.isSignedIn) return const SignInView();
-    return const _AppRoot();
-  }
-}
-
-/// Initialises the subscription check once on first build, then shows the shell.
-class _AppRoot extends StatefulWidget {
-  const _AppRoot();
-
-  @override
-  State<_AppRoot> createState() => _AppRootState();
-}
-
-class _AppRootState extends State<_AppRoot> {
-  SubscriptionViewModel? _sub;
-  VoidCallback? _subListener;
-
-  @override
-  void initState() {
-    super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      _sub = context.read<SubscriptionViewModel>();
-      final vm = context.read<LogViewModel>();
-      _subListener = () => vm.updatePremiumStatus(_sub!.isPremium);
-      _sub!.addListener(_subListener!);
-      await _sub!.initialize();
-      if (mounted) vm.updatePremiumStatus(_sub!.isPremium);
-    });
-  }
-
-  @override
-  void dispose() {
-    if (_subListener != null) _sub?.removeListener(_subListener!);
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => const _AppShell();
-}
-
-/// Bottom-navigation shell holding the four main app tabs via [IndexedStack].
 class _AppShell extends StatefulWidget {
   const _AppShell();
 
@@ -215,7 +138,6 @@ class _AppShellState extends State<_AppShell> {
   }
 }
 
-/// AppBar action that shows the live countdown and opens the [_TimerSheet].
 class _TimerAction extends StatelessWidget {
   const _TimerAction();
 
@@ -263,7 +185,6 @@ class _TimerAction extends StatelessWidget {
   }
 }
 
-/// Bottom sheet with timer controls, volume, and auto-start settings.
 class _TimerSheet extends StatelessWidget {
   const _TimerSheet();
 
@@ -407,7 +328,6 @@ class _TimerSheet extends StatelessWidget {
   }
 }
 
-/// Compact icon button used for the ±15 s timer adjustment controls.
 class _SheetButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
@@ -430,7 +350,6 @@ class _SheetButton extends StatelessWidget {
   }
 }
 
-/// Labeled checkbox row used for vibrate / sound / auto-start toggles.
 class _SettingCheck extends StatelessWidget {
   final String label;
   final bool value;

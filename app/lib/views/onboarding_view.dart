@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:repiq/services/analytics_service.dart';
 
 const _kOnboardingDone = 'onboarding_done_v1';
 
@@ -74,7 +73,6 @@ class _OnboardingViewState extends State<OnboardingView> {
 
   Future<void> _finish() async {
     await markOnboardingDone();
-    AnalyticsService.logOnboardingCompleted();
     widget.onComplete();
   }
 

@@ -5,8 +5,6 @@ import 'package:provider/provider.dart';
 import 'package:repiq/services/local_recommendation_engine.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
-import 'package:repiq/viewmodels/subscription_viewmodel.dart';
-import 'package:repiq/views/paywall_view.dart';
 
 /// Progress charts for strength exercises — estimated 1RM, max weight, or
 /// total volume over a selectable time range.
@@ -33,51 +31,6 @@ class _ProgressViewState extends State<ProgressView> {
 
   @override
   Widget build(BuildContext context) {
-    final isPremium = context.watch<SubscriptionViewModel>().isPremium;
-    if (!isPremium) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.purple.withValues(alpha: 0.12),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(Icons.show_chart,
-                    size: 48, color: Colors.purple),
-              ),
-              const SizedBox(height: 20),
-              const Text('Progress Charts',
-                  style: TextStyle(
-                      fontSize: 20, fontWeight: FontWeight.bold)),
-              const SizedBox(height: 8),
-              const Text(
-                'Track your 1RM, max weight, and volume\nover time with Premium.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey, height: 1.5),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton.icon(
-                onPressed: () => PaywallView.show(context, source: 'progress'),
-                icon: const Icon(Icons.star),
-                label: const Text('Upgrade to Premium'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.redAccent,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                      horizontal: 24, vertical: 14),
-                ),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
     return Consumer<LogViewModel>(
       builder: (context, vm, _) {
         final exercises = vm.exerciseDict.entries

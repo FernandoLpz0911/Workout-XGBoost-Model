@@ -15,16 +15,12 @@ import api
 from api import (
     _model_cache,
     _model_loaded_at,
-    _premium_cache,
     app,
     get_uid,
-    require_premium,
 )
 
-# Override auth dependencies so every request authenticates as "uid_test"
-# without hitting Firebase.
+# Override auth so every request authenticates as "uid_test" without Firebase.
 app.dependency_overrides[get_uid] = lambda: "uid_test"
-app.dependency_overrides[require_premium] = lambda: "uid_test"
 
 client = TestClient(app)
 
@@ -69,11 +65,9 @@ def clear_caches():
     """Reset in-process caches between tests so state doesn't leak."""
     _model_cache.clear()
     _model_loaded_at.clear()
-    _premium_cache.clear()
     yield
     _model_cache.clear()
     _model_loaded_at.clear()
-    _premium_cache.clear()
 
 
 class TestTrainEndpoint:
@@ -246,56 +240,6 @@ class TestModelCache:
         assert "only_one" in _model_cache
 
 
-class TestRequirePremium:
-    def _make_doc(self, status="active", expiry_offset_days=None):
-        doc = MagicMock()
-        doc.exists = True
-        data = {"subscriptionStatus": status}
-        if expiry_offset_days is not None:
-            expiry_dt = datetime.now(timezone.utc) + timedelta(days=expiry_offset_days)
-            ts = MagicMock()
-            ts.astimezone.return_value = expiry_dt
-            data["subscriptionExpiry"] = ts
-        doc.to_dict.return_value = data
-        return doc
-
-    def _call(self, doc):
-        db = MagicMock()
-        db.collection.return_value.document.return_value.get.return_value = doc
-        from fastapi import HTTPException
-        from api import require_premium
-        with patch.object(api, "admin_firestore") as mock_fs:
-            mock_fs.client.return_value = db
-            try:
-                return require_premium(uid="uid_exp_test")
-            except HTTPException as exc:
-                return exc
-
-    def test_active_with_future_expiry_returns_uid(self):
-        doc = self._make_doc(status="active", expiry_offset_days=10)
-        result = self._call(doc)
-        assert result == "uid_exp_test"
-
-    def test_active_with_past_expiry_raises_403(self):
-        from fastapi import HTTPException
-        doc = self._make_doc(status="active", expiry_offset_days=-1)
-        result = self._call(doc)
-        assert isinstance(result, HTTPException)
-        assert result.status_code == 403
-
-    def test_active_with_no_expiry_field_returns_uid(self):
-        doc = self._make_doc(status="active", expiry_offset_days=None)
-        result = self._call(doc)
-        assert result == "uid_exp_test"
-
-    def test_not_active_raises_403(self):
-        from fastapi import HTTPException
-        doc = self._make_doc(status="none")
-        result = self._call(doc)
-        assert isinstance(result, HTTPException)
-        assert result.status_code == 403
-
-
 class TestDeleteUserDataEndpoint:
     def test_returns_200(self):
         response = client.delete("/delete-user-data")
@@ -307,8 +251,3 @@ class TestDeleteUserDataEndpoint:
         assert UID in _model_cache
         client.delete("/delete-user-data")
         assert UID not in _model_cache
-
-    def test_evicts_premium_cache(self):
-        _premium_cache[UID] = (True, time.monotonic() + 60)
-        client.delete("/delete-user-data")
-        assert UID not in _premium_cache
