@@ -21,18 +21,11 @@ class LogView extends StatelessWidget {
         }
         return Scaffold(
           body: vm.session.isEmpty
-              ? _EmptySessionView(
-                  streak: vm.currentStreak,
-                  onAdd: () => _showAddExercise(context, vm))
+              ? _EmptySessionView(onAdd: () => _showAddExercise(context, vm))
               : ListView.builder(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
-                  itemCount: vm.session.length + 1,
-                  itemBuilder: (context, i) {
-                    if (i == 0) {
-                      return _StreakBanner(streak: vm.currentStreak);
-                    }
-                    return _ExerciseCard(vm: vm, index: i - 1);
-                  },
+                  itemCount: vm.session.length,
+                  itemBuilder: (context, i) => _ExerciseCard(vm: vm, index: i),
                 ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _showAddExercise(context, vm),
@@ -53,43 +46,9 @@ class LogView extends StatelessWidget {
   }
 }
 
-class _StreakBanner extends StatelessWidget {
-  final int streak;
-  const _StreakBanner({required this.streak});
-
-  @override
-  Widget build(BuildContext context) {
-    if (streak == 0) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.amber.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: Colors.amber.withValues(alpha: 0.3)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('🔥', style: TextStyle(fontSize: 18)),
-            const SizedBox(width: 8),
-            Text(
-              '$streak-day streak — keep it going!',
-              style: const TextStyle(
-                  color: Colors.amber, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _EmptySessionView extends StatelessWidget {
-  final int streak;
   final VoidCallback onAdd;
-  const _EmptySessionView({required this.streak, required this.onAdd});
+  const _EmptySessionView({required this.onAdd});
 
   @override
   Widget build(BuildContext context) {
@@ -100,10 +59,6 @@ class _EmptySessionView extends StatelessWidget {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (streak > 0) ...[
-            _StreakBanner(streak: streak),
-            const SizedBox(height: 8),
-          ],
           Text(dateStr,
               style: const TextStyle(fontSize: 18, color: Colors.grey)),
           const SizedBox(height: 20),
@@ -302,36 +257,13 @@ class _RecBanner extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Container(
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: Colors.blue.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Row(
-            children: [
-              const Icon(Icons.auto_awesome, color: Colors.blue, size: 18),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '3 × ${rec.targetReps} reps  @  '
-                      '${rec.targetWeight.toStringAsFixed(1)} lbs',
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold, fontSize: 15),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(rec.status,
-                        style: const TextStyle(
-                            fontSize: 12, color: Colors.blueAccent)),
-                  ],
-                ),
-              ),
-            ],
-          ),
+        Text(
+          'Recommendation: ${rec.targetWeight.toStringAsFixed(1)} lbs × ${rec.targetReps} reps',
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
+        const SizedBox(height: 2),
+        Text(rec.status,
+            style: const TextStyle(fontSize: 12, color: Colors.grey)),
         if (rec.notesInsight.isNotEmpty) ...[
           const SizedBox(height: 8),
           _InfoChip(
@@ -934,12 +866,10 @@ class _TrainingModeToggle extends StatelessWidget {
         ButtonSegment(
           value: TrainingMode.hypertrophy,
           label: Text('Hypertrophy'),
-          icon: Icon(Icons.show_chart, size: 15),
         ),
         ButtonSegment(
           value: TrainingMode.strength,
           label: Text('Strength'),
-          icon: Icon(Icons.bolt, size: 15),
         ),
       ],
       selected: {mode},

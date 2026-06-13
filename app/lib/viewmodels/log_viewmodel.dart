@@ -161,23 +161,6 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     return <String>{...fromHistory, ...presets}.toList()..sort();
   }
 
-  int get currentStreak {
-    if (history.isEmpty) return 0;
-    final today = DateTime.now();
-    final loggedDays = history.map((s) => _fmtDate(s.date)).toSet();
-
-    var check = DateTime(today.year, today.month, today.day);
-    if (!loggedDays.contains(_fmtDate(check))) {
-      check = check.subtract(const Duration(days: 1));
-    }
-    int streak = 0;
-    while (loggedDays.contains(_fmtDate(check))) {
-      streak++;
-      check = check.subtract(const Duration(days: 1));
-    }
-    return streak;
-  }
-
   Map<String, List<WorkoutSet>> get historyByDate {
     if (_historyByDateCache != null) return _historyByDateCache!;
     final grouped = <String, List<WorkoutSet>>{};
