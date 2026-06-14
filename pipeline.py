@@ -53,9 +53,17 @@ _WARMUP_RE = re.compile(r"warm[\s-]?up", re.IGNORECASE)
 # Cardio uses distance/duration; Passive logs recovery — both are excluded.
 STRENGTH_CATEGORIES = {
     # FitNotes export names
-    "Chest", "Back", "Legs", "Shoulders", "Biceps", "Triceps", "Arms", "Abs",
+    "Chest",
+    "Back",
+    "Legs",
+    "Shoulders",
+    "Biceps",
+    "Triceps",
+    "Arms",
+    "Abs",
     # In-app manual-entry names (differ from FitNotes)
-    "Core", "Forearms",
+    "Core",
+    "Forearms",
 }
 
 
@@ -89,7 +97,7 @@ def _rolling_slope(series: pd.Series) -> pd.Series:
     for i in range(2, len(values)):
         # polyfit([0,1,2], ...) treats sessions as evenly spaced integers.
         # Index 0 of the result is the slope coefficient.
-        slopes[i] = np.polyfit([0, 1, 2], values[i - 2:i + 1], 1)[0]
+        slopes[i] = np.polyfit([0, 1, 2], values[i - 2 : i + 1], 1)[0]
     return pd.Series(slopes, index=series.index)
 
 
@@ -135,8 +143,8 @@ def run_pipeline(uploaded_file) -> tuple:
         )
 
     comment_tags = df["Comment"].apply(_tag_comment)
-    df[["Form_Issue", "Fatigue_Flag", "Is_Drop_Set", "Is_Warmup"]] = (
-        pd.DataFrame(comment_tags.tolist(), index=df.index)
+    df[["Form_Issue", "Fatigue_Flag", "Is_Drop_Set", "Is_Warmup"]] = pd.DataFrame(
+        comment_tags.tolist(), index=df.index
     )
 
     # Drop sets use a lower weight-to-failure than a true working set, so
@@ -147,9 +155,9 @@ def run_pipeline(uploaded_file) -> tuple:
     # Secondary warm-up filter: even without a comment, any set below 60% of
     # the session's peak weight is almost certainly a feeler or warm-up set.
     if not working_sets.empty:
-        session_peak_weight = working_sets.groupby(
-            ["Date", "Exercise"]
-        )["Weight"].transform("max")
+        session_peak_weight = working_sets.groupby(["Date", "Exercise"])[
+            "Weight"
+        ].transform("max")
         working_sets = working_sets[
             working_sets["Weight"] >= 0.6 * session_peak_weight
         ].copy()
@@ -167,25 +175,35 @@ def run_pipeline(uploaded_file) -> tuple:
     def _rep_consistency_ratio(rep_counts):
         # min/mean ratio: 1.0 = all sets had the same reps (very consistent);
         # values closer to 0 indicate a big drop-off across sets (fatiguing fast).
-        return float(rep_counts.min() / rep_counts.mean()) if rep_counts.mean() > 0 else 1.0
+        return (
+            float(rep_counts.min() / rep_counts.mean())
+            if rep_counts.mean() > 0
+            else 1.0
+        )
 
     # Collapse individual sets into one row per (Date, Exercise) training session.
-    session_summary = working_sets.groupby(["Date", "Exercise", "Category"]).agg(
-        Sets=("Reps", "count"),
-        Avg_Reps=("Reps", "mean"),
-        Max_Weight=("Weight", "max"),
-        Session_Max_1RM=("Estimated_1RM", "max"),
-        Had_Form_Issue=("Form_Issue", "max"),
-        Had_Fatigue=("Fatigue_Flag", "max"),
-        Rep_Consistency=("Reps", _rep_consistency_ratio),
-    ).reset_index()
+    session_summary = (
+        working_sets.groupby(["Date", "Exercise", "Category"])
+        .agg(
+            Sets=("Reps", "count"),
+            Avg_Reps=("Reps", "mean"),
+            Max_Weight=("Weight", "max"),
+            Session_Max_1RM=("Estimated_1RM", "max"),
+            Had_Form_Issue=("Form_Issue", "max"),
+            Had_Fatigue=("Fatigue_Flag", "max"),
+            Rep_Consistency=("Reps", _rep_consistency_ratio),
+        )
+        .reset_index()
+    )
 
     session_summary["Volume_Load"] = (
-        session_summary["Sets"] * session_summary["Avg_Reps"] * session_summary["Max_Weight"]
+        session_summary["Sets"]
+        * session_summary["Avg_Reps"]
+        * session_summary["Max_Weight"]
     )
-    session_summary = session_summary.sort_values(
-        ["Exercise", "Date"]
-    ).reset_index(drop=True)
+    session_summary = session_summary.sort_values(["Exercise", "Date"]).reset_index(
+        drop=True
+    )
 
     # Lag features give the model visibility into the previous session.
     # What happened last time is the strongest single predictor of next-session
@@ -194,7 +212,9 @@ def run_pipeline(uploaded_file) -> tuple:
     # Fill the very first session's Days_Since_Last with 14 (a typical weekly cadence).
     session_summary["Days_Since_Last"] = by_exercise["Date"].diff().dt.days.fillna(14)
     session_summary["Previous_1RM"] = (
-        by_exercise["Session_Max_1RM"].shift().fillna(session_summary["Session_Max_1RM"])
+        by_exercise["Session_Max_1RM"]
+        .shift()
+        .fillna(session_summary["Session_Max_1RM"])
     )
     session_summary["Last_Avg_Reps"] = (
         by_exercise["Avg_Reps"].shift().fillna(session_summary["Avg_Reps"])
@@ -213,9 +233,9 @@ def run_pipeline(uploaded_file) -> tuple:
     )
 
     # Positive momentum = 1RM is trending upward; negative = declining capacity.
-    session_summary["RM_Momentum"] = (
-        session_summary.groupby("Exercise")["Session_Max_1RM"].transform(_rolling_slope)
-    )
+    session_summary["RM_Momentum"] = session_summary.groupby("Exercise")[
+        "Session_Max_1RM"
+    ].transform(_rolling_slope)
 
     # One-hot encode Exercise and Category so the model learns separate coefficients
     # per movement pattern — squat and bench press respond very differently.
@@ -225,9 +245,15 @@ def run_pipeline(uploaded_file) -> tuple:
     # only measurable after the session ends. Including them as features would
     # leak future information into training and produce falsely optimistic accuracy.
     leaky_columns = [
-        "Date", "Max_Weight", "Session_Max_1RM",
-        "Sets", "Avg_Reps", "Volume_Load",
-        "Had_Form_Issue", "Had_Fatigue", "Rep_Consistency",
+        "Date",
+        "Max_Weight",
+        "Session_Max_1RM",
+        "Sets",
+        "Avg_Reps",
+        "Volume_Load",
+        "Had_Form_Issue",
+        "Had_Fatigue",
+        "Rep_Consistency",
     ]
     X = feature_matrix.drop(columns=leaky_columns, errors="ignore")
     y = feature_matrix["Session_Max_1RM"]

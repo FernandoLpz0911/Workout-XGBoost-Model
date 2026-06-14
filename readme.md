@@ -1,5 +1,7 @@
 # RepIQ — AI-Powered Strength Training Coach
 
+[![CI](https://github.com/FernandoLpz0911/workoutNeuralNetwork/actions/workflows/ci.yml/badge.svg)](https://github.com/FernandoLpz0911/workoutNeuralNetwork/actions/workflows/ci.yml)
+
 RepIQ is a privacy-first workout tracking system that gives lifters session-by-session weight and rep recommendations backed by a per-user XGBoost model. It ships as two independent components: a fully offline Flutter mobile app and a Python/FastAPI backend that trains and serves personalised models in the cloud.
 
 ---

@@ -1,0 +1,126 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ── Python: formatting ───────────────────────────────────────────────────────
+  python-format:
+    name: Python — Format check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Check formatting
+        run: ruff format --check .
+
+  # ── Python: linting ──────────────────────────────────────────────────────────
+  python-lint:
+    name: Python — Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run linter
+        run: ruff check .
+
+  # ── Python: tests + coverage ─────────────────────────────────────────────────
+  python-tests:
+    name: Python — Tests (3.${{ matrix.python-minor }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-minor: ["10", "12"]   # test on minimum supported + latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.${{ matrix.python-minor }}"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt pytest pytest-cov
+
+      - name: Run tests with coverage
+        run: |
+          pytest tests/ -v \
+            --cov=. \
+            --cov-omit="workout_ai_env/*,tests/*" \
+            --cov-report=term-missing \
+            --cov-fail-under=80
+
+  # ── Flutter: analysis + formatting ───────────────────────────────────────────
+  flutter-analyze:
+    name: Flutter — Analyze & format check
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Check Dart formatting
+        run: dart format --output none --set-exit-if-changed lib/
+
+      - name: Analyze
+        run: flutter analyze --fatal-infos
+
+  # ── Flutter: tests ────────────────────────────────────────────────────────────
+  flutter-test:
+    name: Flutter — Tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: app
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          cache: true
+
+      - name: Install packages
+        run: flutter pub get
+
+      - name: Run tests
+        run: flutter test --coverage
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-coverage
+          path: app/coverage/lcov.info
+          retention-days: 7

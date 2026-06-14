@@ -15,6 +15,7 @@ from pipeline import (
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
+
 def _csv(*rows: str) -> io.BytesIO:
     """Build an in-memory CSV file with a FitNotes-compatible header."""
     header = "Date,Exercise,Category,Weight,Reps,Comment"
@@ -53,6 +54,7 @@ _SQUAT_FILLER = [
 
 # ── calculate_hybrid_1rm ────────────────────────────────────────────────────
 
+
 class TestCalculateHybrid1RM:
     def test_zero_reps_returns_zero(self):
         assert calculate_hybrid_1rm(100, 0) == 0
@@ -88,6 +90,7 @@ class TestCalculateHybrid1RM:
 
 # ── _tag_comment ─────────────────────────────────────────────────────────────
 
+
 class TestTagComment:
     def test_empty_string_returns_zeros(self):
         assert _tag_comment("") == (0, 0, False, False)
@@ -122,11 +125,10 @@ class TestTagComment:
 
 # ── run_pipeline ─────────────────────────────────────────────────────────────
 
+
 class TestRunPipeline:
     def test_returns_three_values(self):
-        model, feature_cols, summary = run_pipeline(
-            _csv(*BENCH_ROWS, *SQUAT_ROWS)
-        )
+        model, feature_cols, summary = run_pipeline(_csv(*BENCH_ROWS, *SQUAT_ROWS))
         assert model is not None
         assert isinstance(feature_cols, list)
         assert not summary.empty
@@ -206,10 +208,7 @@ class TestRunPipeline:
             run_pipeline(f)
 
     def test_all_drop_sets_raises(self):
-        rows = [
-            f"2026-0{i}-01,Bench Press,Chest,100,8,drop set"
-            for i in range(1, 10)
-        ]
+        rows = [f"2026-0{i}-01,Bench Press,Chest,100,8,drop set" for i in range(1, 10)]
         f = _csv(*rows, "2026-10-01,Bench Press,Chest,100,8,drop set")
         with pytest.raises(ValueError, match="No valid working sets"):
             run_pipeline(f)
