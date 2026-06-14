@@ -63,10 +63,10 @@ void main() {
 
   group('TrainingMode', () {
     test('contains hypertrophy and strength values', () {
-      expect(TrainingMode.values, containsAll([
-        TrainingMode.hypertrophy,
-        TrainingMode.strength,
-      ]));
+      expect(
+        TrainingMode.values,
+        containsAll([TrainingMode.hypertrophy, TrainingMode.strength]),
+      );
     });
 
     test('enum name matches the identifier string', () {

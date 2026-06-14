@@ -11,15 +11,14 @@ WorkoutSet ws(
   double weight,
   int reps, {
   String comment = '',
-}) =>
-    WorkoutSet(
-      date: date,
-      exercise: exercise,
-      category: category,
-      weight: weight,
-      reps: reps,
-      comment: comment,
-    );
+}) => WorkoutSet(
+  date: date,
+  exercise: exercise,
+  category: category,
+  weight: weight,
+  reps: reps,
+  comment: comment,
+);
 
 void main() {
   group('calcOneRM', () {
@@ -74,14 +73,15 @@ void main() {
     test('formula boundary: rep count 6 uses Brzycki, not Epley', () {
       // Brzycki(100, 6) ≠ Epley(100, 6); ensure the Brzycki path is taken
       final brzycki = 100 / (1.0278 - 0.0278 * 6);
-      expect(LocalRecommendationEngine.calcOneRM(100, 6),
-          closeTo(brzycki, 0.01));
+      expect(
+        LocalRecommendationEngine.calcOneRM(100, 6),
+        closeTo(brzycki, 0.01),
+      );
     });
 
     test('formula boundary: rep count 7 uses Epley, not Brzycki', () {
       final epley = 100 * (1 + 0.0333 * 7);
-      expect(LocalRecommendationEngine.calcOneRM(100, 7),
-          closeTo(epley, 0.01));
+      expect(LocalRecommendationEngine.calcOneRM(100, 7), closeTo(epley, 0.01));
     });
   });
   group('recommend — new exercise', () {
@@ -247,8 +247,14 @@ void main() {
 
     test('holds weight and sets FORM FOCUS status', () {
       final history = [
-        ws(base, 'Overhead Press', 'Shoulders', 100, 12,
-            comment: 'form is off'),
+        ws(
+          base,
+          'Overhead Press',
+          'Shoulders',
+          100,
+          12,
+          comment: 'form is off',
+        ),
       ];
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Overhead Press',
@@ -275,9 +281,7 @@ void main() {
     });
 
     test('form issue adds technique-focused notesInsight', () {
-      final history = [
-        ws(base, 'Squat', 'Legs', 200, 8, comment: 'sloppy'),
-      ];
+      final history = [ws(base, 'Squat', 'Legs', 200, 8, comment: 'sloppy')];
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Squat',
         category: 'Legs',
@@ -288,16 +292,17 @@ void main() {
 
     test('multiple form-issue keywords are detected', () {
       for (final keyword in ['did it wrong', "couldn't", 'injury', 'failed']) {
-        final history = [
-          ws(base, 'Squat', 'Legs', 100, 8, comment: keyword),
-        ];
+        final history = [ws(base, 'Squat', 'Legs', 100, 8, comment: keyword)];
         final rec = LocalRecommendationEngine.recommend(
           exercise: 'Squat',
           category: 'Legs',
           allHistory: history,
         );
-        expect(rec.status, contains('FORM FOCUS'),
-            reason: 'expected FORM FOCUS for comment "$keyword"');
+        expect(
+          rec.status,
+          contains('FORM FOCUS'),
+          reason: 'expected FORM FOCUS for comment "$keyword"',
+        );
       }
     });
   });
@@ -306,8 +311,7 @@ void main() {
 
     test('adds fatigue notesInsight when fatigue keyword is present', () {
       final history = [
-        ws(base, 'Lat Pulldown', 'Back', 100, 10,
-            comment: 'forearm fatigued'),
+        ws(base, 'Lat Pulldown', 'Back', 100, 10, comment: 'forearm fatigued'),
       ];
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Lat Pulldown',
@@ -360,21 +364,23 @@ void main() {
       expect(rec.status, contains('Rep drop'));
     });
 
-    test('consistent reps (10→10→10) do not trigger rep-drop stabilization',
-        () {
-      final history = [
-        ws(base, 'Bench Press', 'Chest', 100, 10),
-        ws(base, 'Bench Press', 'Chest', 100, 10),
-        ws(base, 'Bench Press', 'Chest', 100, 10),
-      ];
-      final rec = LocalRecommendationEngine.recommend(
-        exercise: 'Bench Press',
-        category: 'Chest',
-        allHistory: history,
-        mode: TrainingMode.hypertrophy,
-      );
-      expect(rec.status, isNot(contains('Rep drop')));
-    });
+    test(
+      'consistent reps (10→10→10) do not trigger rep-drop stabilization',
+      () {
+        final history = [
+          ws(base, 'Bench Press', 'Chest', 100, 10),
+          ws(base, 'Bench Press', 'Chest', 100, 10),
+          ws(base, 'Bench Press', 'Chest', 100, 10),
+        ];
+        final rec = LocalRecommendationEngine.recommend(
+          exercise: 'Bench Press',
+          category: 'Chest',
+          allHistory: history,
+          mode: TrainingMode.hypertrophy,
+        );
+        expect(rec.status, isNot(contains('Rep drop')));
+      },
+    );
 
     test('single set per session has perfect consistency (no drop)', () {
       final history = [ws(base, 'Squat', 'Legs', 200, 8)];

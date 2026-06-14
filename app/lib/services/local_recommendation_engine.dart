@@ -16,8 +16,8 @@ class LocalRecommendationEngine {
   /// - Mayhew   for 12+ reps (better at higher rep ranges)
   static double calcOneRM(double weight, int reps) {
     if (reps <= 0 || weight <= 0) return 0;
-    if (reps <= 6) return weight / (1.0278 - 0.0278 * reps);    // Brzycki
-    if (reps <= 11) return weight * (1 + 0.0333 * reps);        // Epley
+    if (reps <= 6) return weight / (1.0278 - 0.0278 * reps); // Brzycki
+    if (reps <= 11) return weight * (1 + 0.0333 * reps); // Epley
     return (100 * weight) / (52.2 + 41.9 * exp(-0.055 * reps)); // Mayhew
   }
 
@@ -109,11 +109,12 @@ class LocalRecommendationEngine {
     final double weightIncrement = isStrength ? 5.0 : 2.5;
     final String modeLabel = isStrength ? 'STRENGTH' : 'HYPERTROPHY';
 
-    final raw = allHistory
-        .where((s) => s.exercise == exercise)
-        .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
-        .toList()
-      ..sort((a, b) => a.date.compareTo(b.date));
+    final raw =
+        allHistory
+            .where((s) => s.exercise == exercise)
+            .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
+            .toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
 
     if (raw.isEmpty) {
       return Recommendation(
@@ -131,12 +132,15 @@ class LocalRecommendationEngine {
 
     // Exclude intra-session warm-up weights: any set below 60 % of that
     // session's top weight is likely a warm-up that would inflate rep counts.
-    final workingSessions = sessions.map((sess) {
-      final maxW = sess.map((s) => s.weight).reduce(max);
-      return sess
-          .where((s) => maxW == 0 || s.weight >= 0.6 * maxW)
-          .toList();
-    }).where((sess) => sess.isNotEmpty).toList();
+    final workingSessions = sessions
+        .map((sess) {
+          final maxW = sess.map((s) => s.weight).reduce(max);
+          return sess
+              .where((s) => maxW == 0 || s.weight >= 0.6 * maxW)
+              .toList();
+        })
+        .where((sess) => sess.isNotEmpty)
+        .toList();
 
     if (workingSessions.isEmpty) {
       return Recommendation(
@@ -152,10 +156,10 @@ class LocalRecommendationEngine {
     final lastSess = workingSessions.last;
     final lastMaxW = lastSess.map((s) => s.weight).reduce(max);
     final lastAvgReps =
-        lastSess.map((s) => s.reps).reduce((a, b) => a + b) /
-            lastSess.length;
-    final last1RM =
-        lastSess.map((s) => calcOneRM(s.weight, s.reps)).reduce(max);
+        lastSess.map((s) => s.reps).reduce((a, b) => a + b) / lastSess.length;
+    final last1RM = lastSess
+        .map((s) => calcOneRM(s.weight, s.reps))
+        .reduce(max);
     final hadFormIssue = lastSess.any((s) => _isFormIssue(s.comment));
     final hadFatigue = lastSess.any((s) => _isFatigue(s.comment));
 
@@ -165,8 +169,7 @@ class LocalRecommendationEngine {
         ? workingSessions.sublist(workingSessions.length - 3)
         : workingSessions;
     final recent1RMs = recentSessions
-        .map((sess) =>
-            sess.map((s) => calcOneRM(s.weight, s.reps)).reduce(max))
+        .map((sess) => sess.map((s) => calcOneRM(s.weight, s.reps)).reduce(max))
         .toList();
     final momentum = _slope(recent1RMs);
 
@@ -175,15 +178,16 @@ class LocalRecommendationEngine {
     final repVals = lastSess.map((s) => s.reps.toDouble()).toList();
     final repConsistency = repVals.length > 1
         ? (repVals.reduce(min) /
-                (repVals.reduce((a, b) => a + b) / repVals.length))
-            .clamp(0.0, 1.0)
+                  (repVals.reduce((a, b) => a + b) / repVals.length))
+              .clamp(0.0, 1.0)
         : 1.0;
 
     double targetWeight;
     int targetReps;
     String baseStatus;
 
-    final plateauDetected = workingSessions.length >= 4 &&
+    final plateauDetected =
+        workingSessions.length >= 4 &&
         _isPlateaued(workingSessions.sublist(workingSessions.length - 4));
 
     if (hadFormIssue) {
@@ -193,7 +197,8 @@ class LocalRecommendationEngine {
     } else if (plateauDetected) {
       targetWeight = ((lastMaxW * 0.6) / 2.5).round() * 2.5;
       targetReps = 15;
-      baseStatus = 'DELOAD: Plateau detected — back off to rebuild work capacity';
+      baseStatus =
+          'DELOAD: Plateau detected — back off to rebuild work capacity';
     } else if (lastAvgReps >= graduationReps) {
       targetWeight = lastMaxW + weightIncrement;
       targetReps = defaultReps;
@@ -223,7 +228,9 @@ class LocalRecommendationEngine {
     String status;
 
     if (lastMaxW == 0) {
-      targetReps = (lastAvgReps >= graduationReps) ? volumeTargetReps + 3 : defaultReps;
+      targetReps = (lastAvgReps >= graduationReps)
+          ? volumeTargetReps + 3
+          : defaultReps;
       status = 'BODYWEIGHT: Add reps to progress';
     } else if (momentum < -2.0 && last1RM < required1RM * threshold) {
       // Declining trend combined with an ambitious target — pull back weight
@@ -243,23 +250,28 @@ class LocalRecommendationEngine {
     final insights = <String>[];
     if (hadFormIssue) {
       insights.add(
-          'Form issues were logged last session — prioritize technique over load today.');
+        'Form issues were logged last session — prioritize technique over load today.',
+      );
     }
     if (plateauDetected) {
       insights.add(
-          'No 1RM gain across the last 4 sessions. Deload at 60% load with higher reps to rebuild capacity and break through.');
+        'No 1RM gain across the last 4 sessions. Deload at 60% load with higher reps to rebuild capacity and break through.',
+      );
     }
     if (hadFatigue) {
       insights.add(
-          'Grip or muscle fatigue was logged last session — '
-          'consider a grip aid or an extra rest day.');
+        'Grip or muscle fatigue was logged last session — '
+        'consider a grip aid or an extra rest day.',
+      );
     }
     if (momentum < -2.0) {
       insights.add(
-          '1RM has been declining recently — a deload or extra recovery may help.');
+        '1RM has been declining recently — a deload or extra recovery may help.',
+      );
     } else if (momentum > 5.0) {
       insights.add(
-          'Strong momentum — your 1RM has been climbing consistently!');
+        'Strong momentum — your 1RM has been climbing consistently!',
+      );
     }
 
     return Recommendation(

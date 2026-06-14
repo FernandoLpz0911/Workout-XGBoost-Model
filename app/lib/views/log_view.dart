@@ -30,29 +30,39 @@ class LogView extends StatelessWidget {
                     final setCount = ex.sets.length;
                     return ListTile(
                       contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16, vertical: 4),
-                      title: Text(ex.exercise,
-                          style: const TextStyle(
-                              fontWeight: FontWeight.w600, fontSize: 16)),
+                        horizontal: 16,
+                        vertical: 4,
+                      ),
+                      title: Text(
+                        ex.exercise,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 16,
+                        ),
+                      ),
                       subtitle: Text(
                         setCount == 0
                             ? ex.category
                             : '${ex.category}  ·  $setCount ${setCount == 1 ? "set" : "sets"}',
                         style: const TextStyle(
-                            color: Colors.grey, fontSize: 12),
+                          color: Colors.grey,
+                          fontSize: 12,
+                        ),
                       ),
                       trailing: IconButton(
-                        icon: const Icon(Icons.close,
-                            color: Colors.grey, size: 20),
+                        icon: const Icon(
+                          Icons.close,
+                          color: Colors.grey,
+                          size: 20,
+                        ),
                         tooltip: 'Remove exercise',
-                        onPressed: () =>
-                            _confirmRemove(context, vm, i),
+                        onPressed: () => _confirmRemove(context, vm, i),
                       ),
                       onTap: () => Navigator.push(
                         context,
                         MaterialPageRoute(
-                            builder: (_) =>
-                                _ExerciseDetailPage(exerciseIndex: i)),
+                          builder: (_) => _ExerciseDetailPage(exerciseIndex: i),
+                        ),
                       ),
                     );
                   },
@@ -68,32 +78,37 @@ class LogView extends StatelessWidget {
   }
 
   static Future<void> _showAddExercise(
-      BuildContext context, LogViewModel vm) async {
+    BuildContext context,
+    LogViewModel vm,
+  ) async {
     await showDialog<void>(
       context: context,
       builder: (_) => _AddExerciseDialog(vm: vm),
     );
   }
 
-  static void _confirmRemove(
-      BuildContext context, LogViewModel vm, int index) {
+  static void _confirmRemove(BuildContext context, LogViewModel vm, int index) {
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Remove exercise?'),
         content: Text(
-            'Remove ${vm.session[index].exercise} and all its logged entries?'),
+          'Remove ${vm.session[index].exercise} and all its logged entries?',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               vm.removeExercise(index);
             },
-            child: const Text('Remove',
-                style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Remove',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -109,30 +124,35 @@ class _EmptySessionView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final dateStr =
-        '${_weekday(now.weekday)}, ${_month(now.month)} ${now.day}';
+    final dateStr = '${_weekday(now.weekday)}, ${_month(now.month)} ${now.day}';
     return Center(
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text(dateStr,
-              style: const TextStyle(fontSize: 18, color: Colors.grey)),
+          Text(
+            dateStr,
+            style: const TextStyle(fontSize: 18, color: Colors.grey),
+          ),
           const SizedBox(height: 20),
           const Icon(Icons.fitness_center, size: 64, color: Colors.grey),
           const SizedBox(height: 16),
-          const Text('No exercises yet',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+          const Text(
+            'No exercises yet',
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold),
+          ),
           const SizedBox(height: 8),
-          const Text('Tap the button below to start logging.',
-              style: TextStyle(color: Colors.grey)),
+          const Text(
+            'Tap the button below to start logging.',
+            style: TextStyle(color: Colors.grey),
+          ),
           const SizedBox(height: 32),
           ElevatedButton.icon(
             onPressed: onAdd,
             icon: const Icon(Icons.add),
             label: const Text('Add First Exercise'),
             style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: 24, vertical: 14)),
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+            ),
           ),
         ],
       ),
@@ -227,7 +247,11 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
   }
 
   void _showEditSet(
-      BuildContext context, int setIndex, SessionExercise ex, LogViewModel vm) {
+    BuildContext context,
+    int setIndex,
+    SessionExercise ex,
+    LogViewModel vm,
+  ) {
     showDialog<bool>(
       context: context,
       builder: (_) => _LogSetDialog(
@@ -246,8 +270,9 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
     return Consumer<LogViewModel>(
       builder: (context, vm, _) {
         if (widget.exerciseIndex >= vm.session.length) {
-          WidgetsBinding.instance
-              .addPostFrameCallback((_) => Navigator.pop(context));
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => Navigator.pop(context),
+          );
           return const Scaffold();
         }
 
@@ -264,11 +289,14 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(ex.exercise),
-                Text(ex.category,
-                    style: const TextStyle(
-                        fontSize: 12,
-                        color: Colors.grey,
-                        fontWeight: FontWeight.normal)),
+                Text(
+                  ex.category,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey,
+                    fontWeight: FontWeight.normal,
+                  ),
+                ),
               ],
             ),
           ),
@@ -278,8 +306,7 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
               if (type == ExerciseType.strength) ...[
                 _TrainingModeToggle(
                   mode: ex.trainingMode,
-                  onChanged: (m) =>
-                      vm.setTrainingMode(widget.exerciseIndex, m),
+                  onChanged: (m) => vm.setTrainingMode(widget.exerciseIndex, m),
                 ),
                 const SizedBox(height: 16),
               ],
@@ -306,22 +333,24 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed:
-                      _canSave(type) ? () => _save(vm, ex, type) : null,
+                  onPressed: _canSave(type) ? () => _save(vm, ex, type) : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.redAccent,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(10)),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
                   ),
                   child: Text(
                     type == ExerciseType.cardio
                         ? 'Save Lap'
                         : type == ExerciseType.passive
-                            ? 'Save Session'
-                            : 'Save Set',
+                        ? 'Save Session'
+                        : 'Save Set',
                     style: const TextStyle(
-                        fontSize: 16, fontWeight: FontWeight.bold),
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                 ),
               ),
@@ -330,15 +359,13 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
                 const Divider(),
                 const SizedBox(height: 4),
                 ...ex.sets.asMap().entries.map(
-                      (e) => _SetRow(
-                        setNum: e.key + 1,
-                        set: e.value,
-                        onEdit: () =>
-                            _showEditSet(context, e.key, ex, vm),
-                        onDelete: () =>
-                            vm.removeSet(widget.exerciseIndex, e.key),
-                      ),
-                    ),
+                  (e) => _SetRow(
+                    setNum: e.key + 1,
+                    set: e.value,
+                    onEdit: () => _showEditSet(context, e.key, ex, vm),
+                    onDelete: () => vm.removeSet(widget.exerciseIndex, e.key),
+                  ),
+                ),
               ],
             ],
           ),
@@ -348,77 +375,76 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
   }
 
   List<Widget> _buildStrengthInputs() => [
-        _StepperRow(
-          label: 'WEIGHT (lbs)',
-          value: _weight.toStringAsFixed(1),
-          onDecrement: () =>
-              setState(() => _weight = (_weight - 2.5).clamp(0, 9999)),
-          onIncrement: () => setState(() => _weight += 2.5),
-          onTap: () => _editValue(
-            context,
-            label: 'Weight (lbs)',
-            initial: _weight.toStringAsFixed(1),
-            isDecimal: true,
-            onConfirm: (v) => setState(() => _weight = v),
-          ),
-        ),
-        const SizedBox(height: 20),
-        _StepperRow(
-          label: 'REPS',
-          value: _reps.toString(),
-          onDecrement: () =>
-              setState(() => _reps = (_reps - 1).clamp(0, 999)),
-          onIncrement: () => setState(() => _reps++),
-          onTap: () => _editValue(
-            context,
-            label: 'Reps',
-            initial: _reps.toString(),
-            isDecimal: false,
-            onConfirm: (v) => setState(() => _reps = v.toInt()),
-          ),
-        ),
-      ];
+    _StepperRow(
+      label: 'WEIGHT (lbs)',
+      value: _weight.toStringAsFixed(1),
+      onDecrement: () =>
+          setState(() => _weight = (_weight - 2.5).clamp(0, 9999)),
+      onIncrement: () => setState(() => _weight += 2.5),
+      onTap: () => _editValue(
+        context,
+        label: 'Weight (lbs)',
+        initial: _weight.toStringAsFixed(1),
+        isDecimal: true,
+        onConfirm: (v) => setState(() => _weight = v),
+      ),
+    ),
+    const SizedBox(height: 20),
+    _StepperRow(
+      label: 'REPS',
+      value: _reps.toString(),
+      onDecrement: () => setState(() => _reps = (_reps - 1).clamp(0, 999)),
+      onIncrement: () => setState(() => _reps++),
+      onTap: () => _editValue(
+        context,
+        label: 'Reps',
+        initial: _reps.toString(),
+        isDecimal: false,
+        onConfirm: (v) => setState(() => _reps = v.toInt()),
+      ),
+    ),
+  ];
 
   List<Widget> _buildCardioInputs() => [
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _distCtrl,
-                decoration: const InputDecoration(labelText: 'Distance'),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-            const SizedBox(width: 8),
-            DropdownButton<String>(
-              value: _distUnit,
-              items: const [
-                DropdownMenuItem(value: 'mi', child: Text('mi')),
-                DropdownMenuItem(value: 'km', child: Text('km')),
-              ],
-              onChanged: (v) => setState(() => _distUnit = v ?? 'mi'),
-            ),
+    Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _distCtrl,
+            decoration: const InputDecoration(labelText: 'Distance'),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        const SizedBox(width: 8),
+        DropdownButton<String>(
+          value: _distUnit,
+          items: const [
+            DropdownMenuItem(value: 'mi', child: Text('mi')),
+            DropdownMenuItem(value: 'km', child: Text('km')),
           ],
+          onChanged: (v) => setState(() => _distUnit = v ?? 'mi'),
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _durCtrl,
-          decoration:
-              const InputDecoration(labelText: 'Time', hintText: '0:00:00'),
-          onChanged: (_) => setState(() {}),
-        ),
-      ];
+      ],
+    ),
+    const SizedBox(height: 12),
+    TextField(
+      controller: _durCtrl,
+      decoration: const InputDecoration(labelText: 'Time', hintText: '0:00:00'),
+      onChanged: (_) => setState(() {}),
+    ),
+  ];
 
   List<Widget> _buildPassiveInputs() => [
-        TextField(
-          controller: _durCtrl,
-          decoration: const InputDecoration(
-              labelText: 'Duration', hintText: '0:15:00'),
-          onChanged: (_) => setState(() {}),
-        ),
-      ];
+    TextField(
+      controller: _durCtrl,
+      decoration: const InputDecoration(
+        labelText: 'Duration',
+        hintText: '0:15:00',
+      ),
+      onChanged: (_) => setState(() {}),
+    ),
+  ];
 }
 
 /// Displays the AI recommendation for strength exercises, or a last-session
@@ -439,7 +465,10 @@ class _RecBanner extends StatelessWidget {
 
     if (ex.recError != null) {
       return _InfoChip(
-          color: Colors.grey, icon: Icons.info_outline, text: ex.recError!);
+        color: Colors.grey,
+        icon: Icons.info_outline,
+        text: ex.recError!,
+      );
     }
     final rec = ex.recommendation;
     if (rec == null) return const SizedBox.shrink();
@@ -452,12 +481,17 @@ class _RecBanner extends StatelessWidget {
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
         const SizedBox(height: 2),
-        Text(rec.status,
-            style: const TextStyle(fontSize: 12, color: Colors.grey)),
+        Text(
+          rec.status,
+          style: const TextStyle(fontSize: 12, color: Colors.grey),
+        ),
         if (rec.notesInsight.isNotEmpty) ...[
           const SizedBox(height: 8),
           _InfoChip(
-              color: Colors.amber, icon: Icons.notes, text: rec.notesInsight),
+            color: Colors.amber,
+            icon: Icons.notes,
+            text: rec.notesInsight,
+          ),
         ],
       ],
     );
@@ -469,8 +503,11 @@ class _InfoChip extends StatelessWidget {
   final Color color;
   final IconData icon;
   final String text;
-  const _InfoChip(
-      {required this.color, required this.icon, required this.text});
+  const _InfoChip({
+    required this.color,
+    required this.icon,
+    required this.text,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -487,7 +524,8 @@ class _InfoChip extends StatelessWidget {
           Icon(icon, color: color, size: 16),
           const SizedBox(width: 8),
           Expanded(
-              child: Text(text, style: TextStyle(color: color, fontSize: 13))),
+            child: Text(text, style: TextStyle(color: color, fontSize: 13)),
+          ),
         ],
       ),
     );
@@ -514,17 +552,22 @@ class _SetRow extends StatelessWidget {
       child: Row(
         children: [
           Text(
-              '${set.category == 'Cardio' ? 'Lap' : 'Set'} $setNum',
-              style: const TextStyle(color: Colors.grey, fontSize: 13)),
+            '${set.category == 'Cardio' ? 'Lap' : 'Set'} $setNum',
+            style: const TextStyle(color: Colors.grey, fontSize: 13),
+          ),
           const SizedBox(width: 12),
-          Text(set.displayText,
-              style: const TextStyle(fontWeight: FontWeight.w600)),
+          Text(
+            set.displayText,
+            style: const TextStyle(fontWeight: FontWeight.w600),
+          ),
           if (set.comment.isNotEmpty) ...[
             const SizedBox(width: 8),
             Expanded(
-              child: Text('"${set.comment}"',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
-                  overflow: TextOverflow.ellipsis),
+              child: Text(
+                '"${set.comment}"',
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
             ),
           ] else
             const Spacer(),
@@ -537,8 +580,11 @@ class _SetRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           IconButton(
-            icon:
-                const Icon(Icons.delete_outline, size: 18, color: Colors.grey),
+            icon: const Icon(
+              Icons.delete_outline,
+              size: 18,
+              color: Colors.grey,
+            ),
             onPressed: onDelete,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -625,8 +671,9 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         ElevatedButton(
           onPressed: _canAdd
               ? () {
@@ -642,8 +689,9 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
 
   Widget _buildDropdowns() {
     final categories = widget.vm.allCategories;
-    final exercises =
-        _category != null ? widget.vm.exercisesFor(_category!) : <String>[];
+    final exercises = _category != null
+        ? widget.vm.exercisesFor(_category!)
+        : <String>[];
 
     return Column(
       mainAxisSize: MainAxisSize.min,
@@ -799,8 +847,9 @@ class _LogSetDialogState extends State<_LogSetDialog> {
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context, false),
+          child: const Text('Cancel'),
+        ),
         ElevatedButton(
           onPressed: _isValid ? _save : null,
           child: const Text('Save'),
@@ -810,79 +859,78 @@ class _LogSetDialogState extends State<_LogSetDialog> {
   }
 
   List<Widget> _strengthFields() => [
-        _StepperRow(
-          label: 'WEIGHT (lbs)',
-          value: _weight.toStringAsFixed(1),
-          onDecrement: () =>
-              setState(() => _weight = (_weight - 2.5).clamp(0, 9999)),
-          onIncrement: () => setState(() => _weight += 2.5),
-          onTap: () => _editValue(
-            context,
-            label: 'Weight (lbs)',
-            initial: _weight.toStringAsFixed(1),
-            isDecimal: true,
-            onConfirm: (v) => setState(() => _weight = v),
-          ),
-        ),
-        const SizedBox(height: 20),
-        _StepperRow(
-          label: 'REPS',
-          value: _reps.toString(),
-          onDecrement: () =>
-              setState(() => _reps = (_reps - 1).clamp(0, 999)),
-          onIncrement: () => setState(() => _reps++),
-          onTap: () => _editValue(
-            context,
-            label: 'Reps',
-            initial: _reps.toString(),
-            isDecimal: false,
-            onConfirm: (v) => setState(() => _reps = v.toInt()),
-          ),
-        ),
-      ];
+    _StepperRow(
+      label: 'WEIGHT (lbs)',
+      value: _weight.toStringAsFixed(1),
+      onDecrement: () =>
+          setState(() => _weight = (_weight - 2.5).clamp(0, 9999)),
+      onIncrement: () => setState(() => _weight += 2.5),
+      onTap: () => _editValue(
+        context,
+        label: 'Weight (lbs)',
+        initial: _weight.toStringAsFixed(1),
+        isDecimal: true,
+        onConfirm: (v) => setState(() => _weight = v),
+      ),
+    ),
+    const SizedBox(height: 20),
+    _StepperRow(
+      label: 'REPS',
+      value: _reps.toString(),
+      onDecrement: () => setState(() => _reps = (_reps - 1).clamp(0, 999)),
+      onIncrement: () => setState(() => _reps++),
+      onTap: () => _editValue(
+        context,
+        label: 'Reps',
+        initial: _reps.toString(),
+        isDecimal: false,
+        onConfirm: (v) => setState(() => _reps = v.toInt()),
+      ),
+    ),
+  ];
 
   List<Widget> _cardioFields() => [
-        Row(
-          children: [
-            Expanded(
-              child: TextField(
-                controller: _distCtrl,
-                decoration: const InputDecoration(labelText: 'Distance'),
-                keyboardType:
-                    const TextInputType.numberWithOptions(decimal: true),
-                autofocus: true,
-                onChanged: (_) => setState(() {}),
-              ),
-            ),
-            const SizedBox(width: 8),
-            DropdownButton<String>(
-              value: _distUnit,
-              items: const [
-                DropdownMenuItem(value: 'mi', child: Text('mi')),
-                DropdownMenuItem(value: 'km', child: Text('km')),
-              ],
-              onChanged: (v) => setState(() => _distUnit = v ?? 'mi'),
-            ),
+    Row(
+      children: [
+        Expanded(
+          child: TextField(
+            controller: _distCtrl,
+            decoration: const InputDecoration(labelText: 'Distance'),
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            autofocus: true,
+            onChanged: (_) => setState(() {}),
+          ),
+        ),
+        const SizedBox(width: 8),
+        DropdownButton<String>(
+          value: _distUnit,
+          items: const [
+            DropdownMenuItem(value: 'mi', child: Text('mi')),
+            DropdownMenuItem(value: 'km', child: Text('km')),
           ],
+          onChanged: (v) => setState(() => _distUnit = v ?? 'mi'),
         ),
-        const SizedBox(height: 12),
-        TextField(
-          controller: _durCtrl,
-          decoration:
-              const InputDecoration(labelText: 'Time', hintText: '0:00:00'),
-          onChanged: (_) => setState(() {}),
-        ),
-      ];
+      ],
+    ),
+    const SizedBox(height: 12),
+    TextField(
+      controller: _durCtrl,
+      decoration: const InputDecoration(labelText: 'Time', hintText: '0:00:00'),
+      onChanged: (_) => setState(() {}),
+    ),
+  ];
 
   List<Widget> _passiveFields() => [
-        TextField(
-          controller: _durCtrl,
-          decoration: const InputDecoration(
-              labelText: 'Duration', hintText: '0:15:00'),
-          autofocus: true,
-          onChanged: (_) => setState(() {}),
-        ),
-      ];
+    TextField(
+      controller: _durCtrl,
+      decoration: const InputDecoration(
+        labelText: 'Duration',
+        hintText: '0:15:00',
+      ),
+      autofocus: true,
+      onChanged: (_) => setState(() {}),
+    ),
+  ];
 
   void _save() {
     final date = widget.existingSet?.date ?? DateTime.now();
@@ -942,12 +990,15 @@ class _StepperRow extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label,
-            style: const TextStyle(
-                color: Colors.blueAccent,
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                letterSpacing: 0.8)),
+        Text(
+          label,
+          style: const TextStyle(
+            color: Colors.blueAccent,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 0.8,
+          ),
+        ),
         const SizedBox(height: 8),
         Row(
           children: [
@@ -959,7 +1010,9 @@ class _StepperRow extends StatelessWidget {
                   value,
                   textAlign: TextAlign.center,
                   style: const TextStyle(
-                      fontSize: 40, fontWeight: FontWeight.bold),
+                    fontSize: 40,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ),
@@ -998,10 +1051,7 @@ class _StepBtn extends StatelessWidget {
 class _TrainingModeToggle extends StatelessWidget {
   final TrainingMode mode;
   final void Function(TrainingMode) onChanged;
-  const _TrainingModeToggle({
-    required this.mode,
-    required this.onChanged,
-  });
+  const _TrainingModeToggle({required this.mode, required this.onChanged});
 
   @override
   Widget build(BuildContext context) {
@@ -1011,10 +1061,7 @@ class _TrainingModeToggle extends StatelessWidget {
           value: TrainingMode.hypertrophy,
           label: Text('Hypertrophy'),
         ),
-        ButtonSegment(
-          value: TrainingMode.strength,
-          label: Text('Strength'),
-        ),
+        ButtonSegment(value: TrainingMode.strength, label: Text('Strength')),
       ],
       selected: {mode},
       onSelectionChanged: (s) => onChanged(s.first),
@@ -1047,8 +1094,9 @@ void _editValue(
       ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         ElevatedButton(
           onPressed: () {
             final v = double.tryParse(ctrl.text);
@@ -1067,6 +1115,16 @@ void _editValue(
 String _weekday(int d) =>
     ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'][d - 1];
 String _month(int m) => [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
-    ][m - 1];
+  'Jan',
+  'Feb',
+  'Mar',
+  'Apr',
+  'May',
+  'Jun',
+  'Jul',
+  'Aug',
+  'Sep',
+  'Oct',
+  'Nov',
+  'Dec',
+][m - 1];

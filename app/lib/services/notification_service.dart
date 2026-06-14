@@ -20,8 +20,7 @@ class NotificationService {
     final localTz = await FlutterTimezone.getLocalTimezone();
     tz.setLocalLocation(tz.getLocation(localTz.identifier));
 
-    const androidInit =
-        AndroidInitializationSettings('@mipmap/ic_launcher');
+    const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
     await _plugin.initialize(
       const InitializationSettings(android: androidInit),
     );
@@ -29,7 +28,8 @@ class NotificationService {
     // Request runtime permission on Android 13+.
     await _plugin
         .resolvePlatformSpecificImplementation<
-            AndroidFlutterLocalNotificationsPlugin>()
+          AndroidFlutterLocalNotificationsPlugin
+        >()
         ?.requestNotificationsPermission();
 
     _initialized = true;

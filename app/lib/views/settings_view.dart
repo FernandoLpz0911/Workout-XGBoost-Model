@@ -28,12 +28,17 @@ class SettingsView extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('${vm.localSetCount} sets stored locally',
-                        style: const TextStyle(
-                            fontSize: 18, fontWeight: FontWeight.bold)),
                     Text(
-                        '${vm.historyByDate.length} workout day${vm.historyByDate.length == 1 ? '' : 's'}',
-                        style: const TextStyle(color: Colors.grey)),
+                      '${vm.localSetCount} sets stored locally',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                    Text(
+                      '${vm.historyByDate.length} workout day${vm.historyByDate.length == 1 ? '' : 's'}',
+                      style: const TextStyle(color: Colors.grey),
+                    ),
                   ],
                 ),
               ],
@@ -53,38 +58,44 @@ class SettingsView extends StatelessWidget {
 
         if (vm.lastActionMessage != null) ...[
           const SizedBox(height: 16),
-          Builder(builder: (context) {
-            final msg = vm.lastActionMessage!;
-            final isError = msg.contains('fail') ||
-                msg.contains('Error') ||
-                msg.contains('required');
-            return Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: isError
-                    ? Colors.redAccent.withValues(alpha: 0.15)
-                    : Colors.green.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    isError
-                        ? Icons.error_outline
-                        : Icons.check_circle_outline,
-                    color: isError ? Colors.redAccent : Colors.green,
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(msg)),
-                  GestureDetector(
-                    onTap: () => vm.dismissLastActionMessage(),
-                    child: const Icon(Icons.close,
-                        size: 16, color: Colors.grey),
-                  ),
-                ],
-              ),
-            );
-          }),
+          Builder(
+            builder: (context) {
+              final msg = vm.lastActionMessage!;
+              final isError =
+                  msg.contains('fail') ||
+                  msg.contains('Error') ||
+                  msg.contains('required');
+              return Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: isError
+                      ? Colors.redAccent.withValues(alpha: 0.15)
+                      : Colors.green.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isError
+                          ? Icons.error_outline
+                          : Icons.check_circle_outline,
+                      color: isError ? Colors.redAccent : Colors.green,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Text(msg)),
+                    GestureDetector(
+                      onTap: () => vm.dismissLastActionMessage(),
+                      child: const Icon(
+                        Icons.close,
+                        size: 16,
+                        color: Colors.grey,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
         ],
 
         const SizedBox(height: 24),
@@ -93,16 +104,20 @@ class SettingsView extends StatelessWidget {
           child: Column(
             children: [
               ListTile(
-                leading: const Icon(Icons.privacy_tip_outlined,
-                    color: Colors.blueAccent),
+                leading: const Icon(
+                  Icons.privacy_tip_outlined,
+                  color: Colors.blueAccent,
+                ),
                 title: const Text('Privacy Policy'),
                 trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                 onTap: () => LegalView.showPrivacy(context),
               ),
               const Divider(height: 1, indent: 16),
               ListTile(
-                leading: const Icon(Icons.gavel_outlined,
-                    color: Colors.blueAccent),
+                leading: const Icon(
+                  Icons.gavel_outlined,
+                  color: Colors.blueAccent,
+                ),
                 title: const Text('Terms of Service'),
                 trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                 onTap: () => LegalView.showTerms(context),
@@ -142,19 +157,23 @@ class SettingsView extends StatelessWidget {
       builder: (_) => AlertDialog(
         title: const Text('Clear all data?'),
         content: const Text(
-            'This will permanently delete all locally stored sets. '
-            'This cannot be undone.'),
+          'This will permanently delete all locally stored sets. '
+          'This cannot be undone.',
+        ),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
               vm.clearLocalData();
             },
-            child: const Text('Delete',
-                style: TextStyle(color: Colors.redAccent)),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.redAccent),
+            ),
           ),
         ],
       ),
@@ -171,12 +190,15 @@ class _SectionHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Padding(
       padding: const EdgeInsets.only(bottom: 8),
-      child: Text(title.toUpperCase(),
-          style: const TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
-              letterSpacing: 1.2,
-              color: Colors.grey)),
+      child: Text(
+        title.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 1.2,
+          color: Colors.grey,
+        ),
+      ),
     );
   }
 }
@@ -209,11 +231,14 @@ class _ActionTile extends StatelessWidget {
             ? const SizedBox(
                 width: 24,
                 height: 24,
-                child: CircularProgressIndicator(strokeWidth: 2))
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
             : Icon(icon, color: iconColor ?? Colors.blueAccent),
         title: Text(title),
-        subtitle: Text(subtitle,
-            style: const TextStyle(color: Colors.grey, fontSize: 12)),
+        subtitle: Text(
+          subtitle,
+          style: const TextStyle(color: Colors.grey, fontSize: 12),
+        ),
         trailing: const Icon(Icons.chevron_right, color: Colors.grey),
         enabled: enabled && !loading,
         onTap: onTap,

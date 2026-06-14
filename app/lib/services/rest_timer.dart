@@ -196,8 +196,8 @@ Uint8List _buildBeepWav() {
       final env = i < fadeLen
           ? i / fadeLen.toDouble()
           : i > count - fadeLen
-              ? (count - i) / fadeLen.toDouble()
-              : 1.0;
+          ? (count - i) / fadeLen.toDouble()
+          : 1.0;
       final v = (sin(2 * pi * hz * t) * amplitude * env * 32767).round();
       pcm[start + i] = v.clamp(-32768, 32767);
     }
@@ -221,11 +221,11 @@ Uint8List _buildBeepWav() {
   setStr(8, 'WAVE');
   setStr(12, 'fmt ');
   buf.setUint32(16, 16, Endian.little); // Subchunk1Size (PCM)
-  buf.setUint16(20, 1, Endian.little);  // AudioFormat: PCM
-  buf.setUint16(22, 1, Endian.little);  // NumChannels: Mono
+  buf.setUint16(20, 1, Endian.little); // AudioFormat: PCM
+  buf.setUint16(22, 1, Endian.little); // NumChannels: Mono
   buf.setUint32(24, sampleRate, Endian.little);
   buf.setUint32(28, sampleRate * 2, Endian.little); // ByteRate
-  buf.setUint16(32, 2, Endian.little);  // BlockAlign
+  buf.setUint16(32, 2, Endian.little); // BlockAlign
   buf.setUint16(34, 16, Endian.little); // BitsPerSample
   setStr(36, 'data');
   buf.setUint32(40, dataSize, Endian.little);

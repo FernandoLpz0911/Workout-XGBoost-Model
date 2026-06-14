@@ -33,11 +33,12 @@ class _ProgressViewState extends State<ProgressView> {
   Widget build(BuildContext context) {
     return Consumer<LogViewModel>(
       builder: (context, vm, _) {
-        final exercises = vm.exerciseDict.entries
-            .where((e) => exerciseTypeOf(e.key) == ExerciseType.strength)
-            .expand((e) => e.value)
-            .toList()
-          ..sort();
+        final exercises =
+            vm.exerciseDict.entries
+                .where((e) => exerciseTypeOf(e.key) == ExerciseType.strength)
+                .expand((e) => e.value)
+                .toList()
+              ..sort();
 
         if (exercises.isEmpty) {
           return const Center(
@@ -48,8 +49,10 @@ class _ProgressViewState extends State<ProgressView> {
                 children: [
                   Icon(Icons.show_chart, size: 64, color: Colors.grey),
                   SizedBox(height: 16),
-                  Text('No strength data yet.',
-                      style: TextStyle(fontSize: 18, color: Colors.grey)),
+                  Text(
+                    'No strength data yet.',
+                    style: TextStyle(fontSize: 18, color: Colors.grey),
+                  ),
                   SizedBox(height: 8),
                   Text(
                     'Import your FitNotes CSV or log some sets to see progress charts.',
@@ -64,7 +67,12 @@ class _ProgressViewState extends State<ProgressView> {
 
         _selectedExercise ??= exercises.first;
 
-        final data = _computeData(vm.history, _selectedExercise!, _metric, _daysBack);
+        final data = _computeData(
+          vm.history,
+          _selectedExercise!,
+          _metric,
+          _daysBack,
+        );
 
         return Padding(
           padding: const EdgeInsets.all(16),
@@ -102,8 +110,7 @@ class _ProgressViewState extends State<ProgressView> {
                     child: ChoiceChip(
                       label: Text(e.key),
                       selected: selected,
-                      onSelected: (_) =>
-                          setState(() => _daysBack = e.value),
+                      onSelected: (_) => setState(() => _daysBack = e.value),
                       labelStyle: const TextStyle(fontSize: 12),
                       padding: const EdgeInsets.symmetric(horizontal: 4),
                     ),
@@ -122,7 +129,9 @@ class _ProgressViewState extends State<ProgressView> {
                   ),
                 )
               else
-                Expanded(child: _Chart(data: data, metric: _metric)),
+                Expanded(
+                  child: _Chart(data: data, metric: _metric),
+                ),
             ],
           ),
         );
@@ -131,16 +140,22 @@ class _ProgressViewState extends State<ProgressView> {
   }
 
   static List<_Point> _computeData(
-      List<WorkoutSet> history, String exercise, String metric, int? daysBack) {
+    List<WorkoutSet> history,
+    String exercise,
+    String metric,
+    int? daysBack,
+  ) {
     final cutoff = daysBack != null
         ? DateTime.now().subtract(Duration(days: daysBack))
         : null;
 
-    final relevant = history.where((s) =>
-        s.exercise == exercise &&
-        s.weight > 0 &&
-        s.reps > 0 &&
-        (cutoff == null || s.date.isAfter(cutoff)));
+    final relevant = history.where(
+      (s) =>
+          s.exercise == exercise &&
+          s.weight > 0 &&
+          s.reps > 0 &&
+          (cutoff == null || s.date.isAfter(cutoff)),
+    );
 
     final sessions = <String, _SessionAgg>{};
     for (final s in relevant) {
@@ -210,16 +225,17 @@ class _Chart extends StatelessWidget {
         gridData: FlGridData(
           drawVerticalLine: false,
           horizontalInterval: (maxY - minY) / 4,
-          getDrawingHorizontalLine: (_) => FlLine(
-            color: Colors.white12,
-            strokeWidth: 1,
-          ),
+          getDrawingHorizontalLine: (_) =>
+              FlLine(color: Colors.white12, strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
-          topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-          rightTitles:
-              const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+          topTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
+          rightTitles: const AxisTitles(
+            sideTitles: SideTitles(showTitles: false),
+          ),
           leftTitles: AxisTitles(
             sideTitles: SideTitles(
               showTitles: true,
@@ -267,9 +283,10 @@ class _Chart extends StatelessWidget {
                         ? '${s.y.toStringAsFixed(0)} lbs·reps'
                         : '${s.y.toStringAsFixed(1)} lbs',
                     style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 13),
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
                   ),
                 ],
               );
@@ -308,7 +325,18 @@ class _Chart extends StatelessWidget {
     );
   }
 
-  static String _mon(int m) =>
-      ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-       'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1];
+  static String _mon(int m) => [
+    'Jan',
+    'Feb',
+    'Mar',
+    'Apr',
+    'May',
+    'Jun',
+    'Jul',
+    'Aug',
+    'Sep',
+    'Oct',
+    'Nov',
+    'Dec',
+  ][m - 1];
 }

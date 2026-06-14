@@ -45,30 +45,30 @@ class WorkoutSet {
   });
 
   Map<String, dynamic> toJson() => {
-        // Full ISO 8601 so we can match by exact millisecond on delete/edit
-        'date': date.toIso8601String(),
-        'exercise': exercise,
-        'category': category,
-        'weight': weight,
-        'reps': reps,
-        if (distance != null) 'distance': distance,
-        if (distanceUnit != null) 'distanceUnit': distanceUnit,
-        if (duration != null) 'duration': duration,
-        'comment': comment,
-      };
+    // Full ISO 8601 so we can match by exact millisecond on delete/edit
+    'date': date.toIso8601String(),
+    'exercise': exercise,
+    'category': category,
+    'weight': weight,
+    'reps': reps,
+    if (distance != null) 'distance': distance,
+    if (distanceUnit != null) 'distanceUnit': distanceUnit,
+    if (duration != null) 'duration': duration,
+    'comment': comment,
+  };
 
   factory WorkoutSet.fromJson(Map<String, dynamic> j) => WorkoutSet(
-        // Accepts both full ISO ("2026-05-28T14:30:00") and date-only ("2026-05-28")
-        date: DateTime.parse(j['date'] as String),
-        exercise: j['exercise'] as String,
-        category: j['category'] as String,
-        weight: (j['weight'] as num?)?.toDouble() ?? 0.0,
-        reps: j['reps'] as int? ?? 0,
-        distance: (j['distance'] as num?)?.toDouble(),
-        distanceUnit: j['distanceUnit'] as String?,
-        duration: j['duration'] as String?,
-        comment: j['comment'] as String? ?? '',
-      );
+    // Accepts both full ISO ("2026-05-28T14:30:00") and date-only ("2026-05-28")
+    date: DateTime.parse(j['date'] as String),
+    exercise: j['exercise'] as String,
+    category: j['category'] as String,
+    weight: (j['weight'] as num?)?.toDouble() ?? 0.0,
+    reps: j['reps'] as int? ?? 0,
+    distance: (j['distance'] as num?)?.toDouble(),
+    distanceUnit: j['distanceUnit'] as String?,
+    duration: j['duration'] as String?,
+    comment: j['comment'] as String? ?? '',
+  );
 
   /// Returns a FitNotes-compatible CSV row for this set.
   String toCsvRow() {
@@ -76,10 +76,12 @@ class WorkoutSet {
     final w = weight > 0 ? weight.toStringAsFixed(1) : '';
     final wUnit = weight > 0 ? 'lbs' : '';
     final r = reps > 0 ? reps.toString() : '';
-    final dist =
-        (distance != null && distance! > 0) ? distance!.toStringAsFixed(2) : '';
-    final dUnit =
-        (distance != null && distance! > 0) ? (distanceUnit ?? 'mi') : '';
+    final dist = (distance != null && distance! > 0)
+        ? distance!.toStringAsFixed(2)
+        : '';
+    final dUnit = (distance != null && distance! > 0)
+        ? (distanceUnit ?? 'mi')
+        : '';
     final dur = duration ?? '';
     final ex = exercise.replaceAll('"', '""');
     final cat = category.replaceAll('"', '""');
@@ -94,7 +96,8 @@ class WorkoutSet {
     }
     if (distance != null && distance! > 0) {
       final unit = distanceUnit ?? 'mi';
-      if (duration != null) return '${distance!.toStringAsFixed(2)} $unit @ $duration';
+      if (duration != null)
+        return '${distance!.toStringAsFixed(2)} $unit @ $duration';
       return '${distance!.toStringAsFixed(2)} $unit';
     }
     return '${weight.toStringAsFixed(1)} lbs × $reps';
