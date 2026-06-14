@@ -14,3 +14,7 @@ ignore = [
 # whether pytest is invoked as `pytest` or `python -m pytest`.
 pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "--cov=. --cov-report=term-missing --cov-fail-under=80"
+
+[tool.coverage.run]
+omit = ["workout_ai_env/*", "tests/*"]

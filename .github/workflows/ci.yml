@@ -64,12 +64,7 @@ jobs:
         run: pip install -r requirements.txt pytest pytest-cov
 
       - name: Run tests with coverage
-        run: |
-          pytest tests/ -v \
-            --cov=. \
-            --cov-omit="workout_ai_env/*,tests/*" \
-            --cov-report=term-missing \
-            --cov-fail-under=80
+        run: pytest tests/ -v
 
   # ── Flutter: analysis + formatting ───────────────────────────────────────────
   flutter-analyze:
