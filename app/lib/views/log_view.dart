@@ -7,8 +7,8 @@ import 'package:repiq/viewmodels/log_viewmodel.dart';
 
 export 'package:repiq/viewmodels/log_viewmodel.dart' show TrainingMode;
 
-/// Main workout logging screen. Shows today's session exercises and lets the
-/// user add exercises, log sets, edit or delete sets, and start the rest timer.
+/// Main log tab. Shows today's exercises as a tappable list.
+/// Tap an exercise to open its detail page and log sets.
 class LogView extends StatelessWidget {
   const LogView({super.key});
 
@@ -23,9 +23,39 @@ class LogView extends StatelessWidget {
           body: vm.session.isEmpty
               ? _EmptySessionView(onAdd: () => _showAddExercise(context, vm))
               : ListView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 100),
+                  padding: const EdgeInsets.symmetric(vertical: 8),
                   itemCount: vm.session.length,
-                  itemBuilder: (context, i) => _ExerciseCard(vm: vm, index: i),
+                  itemBuilder: (context, i) {
+                    final ex = vm.session[i];
+                    final setCount = ex.sets.length;
+                    return ListTile(
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16, vertical: 4),
+                      title: Text(ex.exercise,
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w600, fontSize: 16)),
+                      subtitle: Text(
+                        setCount == 0
+                            ? ex.category
+                            : '${ex.category}  ·  $setCount ${setCount == 1 ? "set" : "sets"}',
+                        style: const TextStyle(
+                            color: Colors.grey, fontSize: 12),
+                      ),
+                      trailing: IconButton(
+                        icon: const Icon(Icons.close,
+                            color: Colors.grey, size: 20),
+                        tooltip: 'Remove exercise',
+                        onPressed: () =>
+                            _confirmRemove(context, vm, i),
+                      ),
+                      onTap: () => Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                            builder: (_) =>
+                                _ExerciseDetailPage(exerciseIndex: i)),
+                      ),
+                    );
+                  },
                 ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _showAddExercise(context, vm),
@@ -44,8 +74,34 @@ class LogView extends StatelessWidget {
       builder: (_) => _AddExerciseDialog(vm: vm),
     );
   }
+
+  static void _confirmRemove(
+      BuildContext context, LogViewModel vm, int index) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Remove exercise?'),
+        content: Text(
+            'Remove ${vm.session[index].exercise} and all its logged entries?'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              vm.removeExercise(index);
+            },
+            child: const Text('Remove',
+                style: TextStyle(color: Colors.redAccent)),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
+/// Shown when no exercises have been added for the current day.
 class _EmptySessionView extends StatelessWidget {
   final VoidCallback onAdd;
   const _EmptySessionView({required this.onAdd});
@@ -84,123 +140,94 @@ class _EmptySessionView extends StatelessWidget {
   }
 }
 
-class _ExerciseCard extends StatelessWidget {
-  final LogViewModel vm;
-  final int index;
-  const _ExerciseCard({required this.vm, required this.index});
+/// Full-screen logging page for a single exercise.
+/// Shows the AI recommendation, training mode toggle, weight/reps steppers,
+/// and the running list of sets logged so far today.
+class _ExerciseDetailPage extends StatefulWidget {
+  final int exerciseIndex;
+  const _ExerciseDetailPage({required this.exerciseIndex});
 
   @override
-  Widget build(BuildContext context) {
-    final ex = vm.session[index];
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(ex.exercise,
-                          style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold)),
-                      const SizedBox(height: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.redAccent.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(ex.category,
-                            style: const TextStyle(
-                                fontSize: 12, color: Colors.redAccent)),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.close, color: Colors.grey),
-                  onPressed: () => _confirmRemove(context),
-                  tooltip: 'Remove exercise',
-                ),
-              ],
-            ),
-            if (exerciseTypeOf(ex.category) == ExerciseType.strength) ...[
-              const SizedBox(height: 10),
-              _TrainingModeToggle(
-                mode: ex.trainingMode,
-                onChanged: (mode) => vm.setTrainingMode(index, mode),
-              ),
-            ],
-            const SizedBox(height: 12),
-            _RecBanner(ex: ex),
-            if (ex.sets.isNotEmpty) ...[
-              const SizedBox(height: 12),
-              const Divider(),
-              ...ex.sets.asMap().entries.map(
-                    (e) => _SetRow(
-                      setNum: e.key + 1,
-                      set: e.value,
-                      onEdit: () => _showEditSet(context, e.key),
-                      onDelete: () => vm.removeSet(index, e.key),
-                    ),
-                  ),
-            ],
-            const SizedBox(height: 8),
-            TextButton.icon(
-              onPressed: () => _showLogSet(context),
-              icon: const Icon(Icons.add_circle_outline),
-              label: Text(_logLabel(ex.category)),
-            ),
-          ],
-        ),
-      ),
-    );
+  State<_ExerciseDetailPage> createState() => _ExerciseDetailPageState();
+}
+
+class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
+  double _weight = 0;
+  int _reps = 0;
+  final _distCtrl = TextEditingController();
+  final _durCtrl = TextEditingController();
+  String _distUnit = 'mi';
+  final _noteCtrl = TextEditingController();
+  bool _initialized = false;
+
+  void _maybeInit(SessionExercise ex) {
+    if (_initialized) return;
+    _initialized = true;
+    final rec = ex.recommendation;
+    _weight = rec?.targetWeight ?? 0.0;
+    _reps = rec?.targetReps ?? 8;
   }
 
-  String _logLabel(String category) {
-    switch (exerciseTypeOf(category)) {
-      case ExerciseType.cardio:
-        return 'Log Lap';
-      case ExerciseType.passive:
-        return 'Log Session';
+  @override
+  void dispose() {
+    _distCtrl.dispose();
+    _durCtrl.dispose();
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  bool _canSave(ExerciseType type) {
+    switch (type) {
       case ExerciseType.strength:
-        return 'Log Set';
+        return _weight > 0 && _reps > 0;
+      case ExerciseType.cardio:
+        return double.tryParse(_distCtrl.text) != null &&
+            _durCtrl.text.trim().isNotEmpty;
+      case ExerciseType.passive:
+        return _durCtrl.text.trim().isNotEmpty;
     }
   }
 
-  void _confirmRemove(BuildContext context) {
-    showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Remove exercise?'),
-        content: Text(
-            'Remove ${vm.session[index].exercise} and all its logged entries?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              vm.removeExercise(index);
-            },
-            child: const Text('Remove',
-                style: TextStyle(color: Colors.redAccent)),
-          ),
-        ],
-      ),
-    );
+  void _save(LogViewModel vm, SessionExercise ex, ExerciseType type) {
+    final date = DateTime.now();
+    final WorkoutSet set;
+    switch (type) {
+      case ExerciseType.strength:
+        set = WorkoutSet(
+          date: date,
+          exercise: ex.exercise,
+          category: ex.category,
+          weight: _weight,
+          reps: _reps,
+          comment: _noteCtrl.text.trim(),
+        );
+      case ExerciseType.cardio:
+        set = WorkoutSet(
+          date: date,
+          exercise: ex.exercise,
+          category: ex.category,
+          distance: double.parse(_distCtrl.text),
+          distanceUnit: _distUnit,
+          duration: _durCtrl.text.trim(),
+          comment: _noteCtrl.text.trim(),
+        );
+      case ExerciseType.passive:
+        set = WorkoutSet(
+          date: date,
+          exercise: ex.exercise,
+          category: ex.category,
+          duration: _durCtrl.text.trim(),
+          comment: _noteCtrl.text.trim(),
+        );
+    }
+    vm.logSet(widget.exerciseIndex, set);
+    _noteCtrl.clear();
+    final timer = context.read<RestTimer>();
+    if (timer.autoStartEnabled) timer.start();
   }
 
-  void _showEditSet(BuildContext context, int setIndex) {
-    final ex = vm.session[index];
+  void _showEditSet(
+      BuildContext context, int setIndex, SessionExercise ex, LogViewModel vm) {
     showDialog<bool>(
       context: context,
       builder: (_) => _LogSetDialog(
@@ -208,28 +235,194 @@ class _ExerciseCard extends StatelessWidget {
         category: ex.category,
         recommendation: ex.recommendation,
         existingSet: ex.sets[setIndex],
-        onSave: (updated) => vm.updateSet(index, setIndex, updated),
+        onSave: (updated) =>
+            vm.updateSet(widget.exerciseIndex, setIndex, updated),
       ),
     );
   }
 
-  void _showLogSet(BuildContext context) {
-    final ex = vm.session[index];
-    final timer = context.read<RestTimer>();
-    showDialog<bool>(
-      context: context,
-      builder: (_) => _LogSetDialog(
-        exercise: ex.exercise,
-        category: ex.category,
-        recommendation: ex.recommendation,
-        onSave: (set) => vm.logSet(index, set),
-      ),
-    ).then((saved) {
-      if (saved == true && timer.autoStartEnabled) timer.start();
-    });
+  @override
+  Widget build(BuildContext context) {
+    return Consumer<LogViewModel>(
+      builder: (context, vm, _) {
+        if (widget.exerciseIndex >= vm.session.length) {
+          WidgetsBinding.instance
+              .addPostFrameCallback((_) => Navigator.pop(context));
+          return const Scaffold();
+        }
+
+        final ex = vm.session[widget.exerciseIndex];
+        _maybeInit(ex);
+        final type = exerciseTypeOf(ex.category);
+
+        return Scaffold(
+          backgroundColor: const Color(0xFF0E1117),
+          appBar: AppBar(
+            backgroundColor: const Color(0xFF0E1117),
+            surfaceTintColor: Colors.transparent,
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(ex.exercise),
+                Text(ex.category,
+                    style: const TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey,
+                        fontWeight: FontWeight.normal)),
+              ],
+            ),
+          ),
+          body: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+            children: [
+              if (type == ExerciseType.strength) ...[
+                _TrainingModeToggle(
+                  mode: ex.trainingMode,
+                  onChanged: (m) =>
+                      vm.setTrainingMode(widget.exerciseIndex, m),
+                ),
+                const SizedBox(height: 16),
+              ],
+              _RecBanner(ex: ex),
+              const SizedBox(height: 24),
+              if (type == ExerciseType.strength)
+                ..._buildStrengthInputs()
+              else if (type == ExerciseType.cardio)
+                ..._buildCardioInputs()
+              else
+                ..._buildPassiveInputs(),
+              const SizedBox(height: 16),
+              TextField(
+                controller: _noteCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Note (optional)',
+                  hintText: 'e.g. "forearms tired"',
+                  isDense: true,
+                ),
+                maxLines: 2,
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed:
+                      _canSave(type) ? () => _save(vm, ex, type) : null,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.redAccent,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(10)),
+                  ),
+                  child: Text(
+                    type == ExerciseType.cardio
+                        ? 'Save Lap'
+                        : type == ExerciseType.passive
+                            ? 'Save Session'
+                            : 'Save Set',
+                    style: const TextStyle(
+                        fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              if (ex.sets.isNotEmpty) ...[
+                const SizedBox(height: 28),
+                const Divider(),
+                const SizedBox(height: 4),
+                ...ex.sets.asMap().entries.map(
+                      (e) => _SetRow(
+                        setNum: e.key + 1,
+                        set: e.value,
+                        onEdit: () =>
+                            _showEditSet(context, e.key, ex, vm),
+                        onDelete: () =>
+                            vm.removeSet(widget.exerciseIndex, e.key),
+                      ),
+                    ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
   }
+
+  List<Widget> _buildStrengthInputs() => [
+        _StepperRow(
+          label: 'WEIGHT (lbs)',
+          value: _weight.toStringAsFixed(1),
+          onDecrement: () =>
+              setState(() => _weight = (_weight - 2.5).clamp(0, 9999)),
+          onIncrement: () => setState(() => _weight += 2.5),
+          onTap: () => _editValue(
+            context,
+            label: 'Weight (lbs)',
+            initial: _weight.toStringAsFixed(1),
+            isDecimal: true,
+            onConfirm: (v) => setState(() => _weight = v),
+          ),
+        ),
+        const SizedBox(height: 20),
+        _StepperRow(
+          label: 'REPS',
+          value: _reps.toString(),
+          onDecrement: () =>
+              setState(() => _reps = (_reps - 1).clamp(0, 999)),
+          onIncrement: () => setState(() => _reps++),
+          onTap: () => _editValue(
+            context,
+            label: 'Reps',
+            initial: _reps.toString(),
+            isDecimal: false,
+            onConfirm: (v) => setState(() => _reps = v.toInt()),
+          ),
+        ),
+      ];
+
+  List<Widget> _buildCardioInputs() => [
+        Row(
+          children: [
+            Expanded(
+              child: TextField(
+                controller: _distCtrl,
+                decoration: const InputDecoration(labelText: 'Distance'),
+                keyboardType:
+                    const TextInputType.numberWithOptions(decimal: true),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+            const SizedBox(width: 8),
+            DropdownButton<String>(
+              value: _distUnit,
+              items: const [
+                DropdownMenuItem(value: 'mi', child: Text('mi')),
+                DropdownMenuItem(value: 'km', child: Text('km')),
+              ],
+              onChanged: (v) => setState(() => _distUnit = v ?? 'mi'),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        TextField(
+          controller: _durCtrl,
+          decoration:
+              const InputDecoration(labelText: 'Time', hintText: '0:00:00'),
+          onChanged: (_) => setState(() {}),
+        ),
+      ];
+
+  List<Widget> _buildPassiveInputs() => [
+        TextField(
+          controller: _durCtrl,
+          decoration: const InputDecoration(
+              labelText: 'Duration', hintText: '0:15:00'),
+          onChanged: (_) => setState(() {}),
+        ),
+      ];
 }
 
+/// Displays the AI recommendation for strength exercises, or a last-session
+/// summary for cardio/passive exercises.
 class _RecBanner extends StatelessWidget {
   final SessionExercise ex;
   const _RecBanner({required this.ex});
@@ -241,15 +434,12 @@ class _RecBanner extends StatelessWidget {
     if (type != ExerciseType.strength) {
       final summary = ex.lastSessionSummary;
       if (summary == null || summary.isEmpty) return const SizedBox.shrink();
-      return _InfoChip(
-          color: Colors.blue, icon: Icons.history, text: summary);
+      return _InfoChip(color: Colors.blue, icon: Icons.history, text: summary);
     }
 
     if (ex.recError != null) {
       return _InfoChip(
-          color: Colors.grey,
-          icon: Icons.info_outline,
-          text: ex.recError!);
+          color: Colors.grey, icon: Icons.info_outline, text: ex.recError!);
     }
     final rec = ex.recommendation;
     if (rec == null) return const SizedBox.shrink();
@@ -267,15 +457,14 @@ class _RecBanner extends StatelessWidget {
         if (rec.notesInsight.isNotEmpty) ...[
           const SizedBox(height: 8),
           _InfoChip(
-              color: Colors.amber,
-              icon: Icons.notes,
-              text: rec.notesInsight),
+              color: Colors.amber, icon: Icons.notes, text: rec.notesInsight),
         ],
       ],
     );
   }
 }
 
+/// Colored pill used for notes insight, history summaries, and error messages.
 class _InfoChip extends StatelessWidget {
   final Color color;
   final IconData icon;
@@ -298,14 +487,14 @@ class _InfoChip extends StatelessWidget {
           Icon(icon, color: color, size: 16),
           const SizedBox(width: 8),
           Expanded(
-              child:
-                  Text(text, style: TextStyle(color: color, fontSize: 13))),
+              child: Text(text, style: TextStyle(color: color, fontSize: 13))),
         ],
       ),
     );
   }
 }
 
+/// One logged set row with set number, display text, and edit/delete actions.
 class _SetRow extends StatelessWidget {
   final int setNum;
   final WorkoutSet set;
@@ -334,15 +523,13 @@ class _SetRow extends StatelessWidget {
             const SizedBox(width: 8),
             Expanded(
               child: Text('"${set.comment}"',
-                  style:
-                      const TextStyle(color: Colors.grey, fontSize: 12),
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
                   overflow: TextOverflow.ellipsis),
             ),
           ] else
             const Spacer(),
           IconButton(
-            icon: const Icon(Icons.edit_outlined,
-                size: 16, color: Colors.grey),
+            icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.grey),
             onPressed: onEdit,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -350,8 +537,8 @@ class _SetRow extends StatelessWidget {
           ),
           const SizedBox(width: 8),
           IconButton(
-            icon: const Icon(Icons.delete_outline,
-                size: 18, color: Colors.grey),
+            icon:
+                const Icon(Icons.delete_outline, size: 18, color: Colors.grey),
             onPressed: onDelete,
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
@@ -362,6 +549,7 @@ class _SetRow extends StatelessWidget {
   }
 }
 
+/// Dialog for picking or typing an exercise to add to today's session.
 class _AddExerciseDialog extends StatefulWidget {
   final LogViewModel vm;
   const _AddExerciseDialog({required this.vm});
@@ -428,9 +616,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
                 }
               }),
               child: Text(
-                _customMode
-                    ? 'Pick from history'
-                    : 'Enter custom exercise',
+                _customMode ? 'Pick from history' : 'Enter custom exercise',
                 style: const TextStyle(fontSize: 12),
               ),
             ),
@@ -445,8 +631,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
           onPressed: _canAdd
               ? () {
                   Navigator.pop(context);
-                  widget.vm
-                      .addExercise(_resolvedCategory!, _resolvedExercise!);
+                  widget.vm.addExercise(_resolvedCategory!, _resolvedExercise!);
                 }
               : null,
           child: const Text('Add'),
@@ -515,6 +700,8 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
   }
 }
 
+/// Dialog for editing an already-logged set. Supports strength, cardio, and
+/// passive exercise types.
 class _LogSetDialog extends StatefulWidget {
   final String exercise;
   final String category;
@@ -535,16 +722,11 @@ class _LogSetDialog extends StatefulWidget {
 }
 
 class _LogSetDialogState extends State<_LogSetDialog> {
-  // Strength steppers
   double _weight = 0;
   int _reps = 0;
-
-  // Cardio fields
   final _distCtrl = TextEditingController();
   final _durCtrl = TextEditingController();
   String _distUnit = 'mi';
-
-  // Shared
   final _noteCtrl = TextEditingController();
 
   ExerciseType get _type => exerciseTypeOf(widget.category);
@@ -556,7 +738,9 @@ class _LogSetDialogState extends State<_LogSetDialog> {
     if (existing != null) {
       _weight = existing.weight;
       _reps = existing.reps;
-      _distCtrl.text = existing.distance != null ? existing.distance!.toStringAsFixed(2) : '';
+      _distCtrl.text = existing.distance != null
+          ? existing.distance!.toStringAsFixed(2)
+          : '';
       _distUnit = existing.distanceUnit ?? 'mi';
       _durCtrl.text = existing.duration ?? '';
       _noteCtrl.text = existing.comment;
@@ -590,13 +774,7 @@ class _LogSetDialogState extends State<_LogSetDialog> {
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text(widget.existingSet != null
-          ? 'Edit Set'
-          : _type == ExerciseType.cardio
-              ? 'Log Lap'
-              : _type == ExerciseType.passive
-                  ? 'Log Session'
-                  : 'Log Set'),
+      title: const Text('Edit Set'),
       contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
       content: SingleChildScrollView(
         child: Column(
@@ -690,8 +868,8 @@ class _LogSetDialogState extends State<_LogSetDialog> {
         const SizedBox(height: 12),
         TextField(
           controller: _durCtrl,
-          decoration: const InputDecoration(
-              labelText: 'Time', hintText: '0:00:00'),
+          decoration:
+              const InputDecoration(labelText: 'Time', hintText: '0:00:00'),
           onChanged: (_) => setState(() {}),
         ),
       ];
@@ -705,44 +883,6 @@ class _LogSetDialogState extends State<_LogSetDialog> {
           onChanged: (_) => setState(() {}),
         ),
       ];
-
-  void _editValue(
-    BuildContext context, {
-    required String label,
-    required String initial,
-    required bool isDecimal,
-    required void Function(double) onConfirm,
-  }) {
-    final ctrl = TextEditingController(text: initial);
-    showDialog<void>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: Text(label),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          keyboardType:
-              TextInputType.numberWithOptions(decimal: isDecimal),
-          decoration: InputDecoration(hintText: label),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () {
-              final v = double.tryParse(ctrl.text);
-              if (v != null) {
-                onConfirm(v);
-                Navigator.pop(context);
-              }
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
-    );
-  }
 
   void _save() {
     final date = widget.existingSet?.date ?? DateTime.now();
@@ -781,6 +921,8 @@ class _LogSetDialogState extends State<_LogSetDialog> {
   }
 }
 
+/// Labeled stepper: a large value display flanked by − and + buttons.
+/// Tapping the value opens a text dialog for direct entry.
 class _StepperRow extends StatelessWidget {
   final String label;
   final String value;
@@ -829,6 +971,7 @@ class _StepperRow extends StatelessWidget {
   }
 }
 
+/// Square tap target used as the − / + buttons in [_StepperRow].
 class _StepBtn extends StatelessWidget {
   final IconData icon;
   final VoidCallback onTap;
@@ -851,6 +994,7 @@ class _StepBtn extends StatelessWidget {
   }
 }
 
+/// Segmented button for switching between Hypertrophy and Strength modes.
 class _TrainingModeToggle extends StatelessWidget {
   final TrainingMode mode;
   final void Function(TrainingMode) onChanged;
@@ -880,6 +1024,44 @@ class _TrainingModeToggle extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Shows a dialog to type a numeric value directly into a stepper field.
+void _editValue(
+  BuildContext context, {
+  required String label,
+  required String initial,
+  required bool isDecimal,
+  required void Function(double) onConfirm,
+}) {
+  final ctrl = TextEditingController(text: initial);
+  showDialog<void>(
+    context: context,
+    builder: (_) => AlertDialog(
+      title: Text(label),
+      content: TextField(
+        controller: ctrl,
+        autofocus: true,
+        keyboardType: TextInputType.numberWithOptions(decimal: isDecimal),
+        decoration: InputDecoration(hintText: label),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        ElevatedButton(
+          onPressed: () {
+            final v = double.tryParse(ctrl.text);
+            if (v != null) {
+              onConfirm(v);
+              Navigator.pop(context);
+            }
+          },
+          child: const Text('OK'),
+        ),
+      ],
+    ),
+  );
 }
 
 String _weekday(int d) =>
