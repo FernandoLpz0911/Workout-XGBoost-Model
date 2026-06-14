@@ -13,8 +13,10 @@ void main() {
         comment: 'felt strong',
       );
       final restored = WorkoutSet.fromJson(original.toJson());
-      expect(restored.date.millisecondsSinceEpoch,
-          original.date.millisecondsSinceEpoch);
+      expect(
+        restored.date.millisecondsSinceEpoch,
+        original.date.millisecondsSinceEpoch,
+      );
       expect(restored.exercise, original.exercise);
       expect(restored.category, original.category);
       expect(restored.weight, original.weight);

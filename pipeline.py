@@ -155,12 +155,8 @@ def run_pipeline(uploaded_file) -> tuple:
     # Secondary warm-up filter: even without a comment, any set below 60% of
     # the session's peak weight is almost certainly a feeler or warm-up set.
     if not working_sets.empty:
-        session_peak_weight = working_sets.groupby(["Date", "Exercise"])[
-            "Weight"
-        ].transform("max")
-        working_sets = working_sets[
-            working_sets["Weight"] >= 0.6 * session_peak_weight
-        ].copy()
+        session_peak_weight = working_sets.groupby(["Date", "Exercise"])["Weight"].transform("max")
+        working_sets = working_sets[working_sets["Weight"] >= 0.6 * session_peak_weight].copy()
 
     if working_sets.empty:
         raise ValueError(
@@ -175,11 +171,7 @@ def run_pipeline(uploaded_file) -> tuple:
     def _rep_consistency_ratio(rep_counts):
         # min/mean ratio: 1.0 = all sets had the same reps (very consistent);
         # values closer to 0 indicate a big drop-off across sets (fatiguing fast).
-        return (
-            float(rep_counts.min() / rep_counts.mean())
-            if rep_counts.mean() > 0
-            else 1.0
-        )
+        return float(rep_counts.min() / rep_counts.mean()) if rep_counts.mean() > 0 else 1.0
 
     # Collapse individual sets into one row per (Date, Exercise) training session.
     session_summary = (
@@ -197,13 +189,9 @@ def run_pipeline(uploaded_file) -> tuple:
     )
 
     session_summary["Volume_Load"] = (
-        session_summary["Sets"]
-        * session_summary["Avg_Reps"]
-        * session_summary["Max_Weight"]
+        session_summary["Sets"] * session_summary["Avg_Reps"] * session_summary["Max_Weight"]
     )
-    session_summary = session_summary.sort_values(["Exercise", "Date"]).reset_index(
-        drop=True
-    )
+    session_summary = session_summary.sort_values(["Exercise", "Date"]).reset_index(drop=True)
 
     # Lag features give the model visibility into the previous session.
     # What happened last time is the strongest single predictor of next-session
@@ -212,9 +200,7 @@ def run_pipeline(uploaded_file) -> tuple:
     # Fill the very first session's Days_Since_Last with 14 (a typical weekly cadence).
     session_summary["Days_Since_Last"] = by_exercise["Date"].diff().dt.days.fillna(14)
     session_summary["Previous_1RM"] = (
-        by_exercise["Session_Max_1RM"]
-        .shift()
-        .fillna(session_summary["Session_Max_1RM"])
+        by_exercise["Session_Max_1RM"].shift().fillna(session_summary["Session_Max_1RM"])
     )
     session_summary["Last_Avg_Reps"] = (
         by_exercise["Avg_Reps"].shift().fillna(session_summary["Avg_Reps"])
@@ -222,15 +208,9 @@ def run_pipeline(uploaded_file) -> tuple:
     session_summary["Prev_Volume_Load"] = (
         by_exercise["Volume_Load"].shift().fillna(session_summary["Volume_Load"])
     )
-    session_summary["Prev_Form_Issue"] = (
-        by_exercise["Had_Form_Issue"].shift().fillna(0).astype(int)
-    )
-    session_summary["Prev_Fatigue"] = (
-        by_exercise["Had_Fatigue"].shift().fillna(0).astype(int)
-    )
-    session_summary["Prev_Rep_Consistency"] = (
-        by_exercise["Rep_Consistency"].shift().fillna(1.0)
-    )
+    session_summary["Prev_Form_Issue"] = by_exercise["Had_Form_Issue"].shift().fillna(0).astype(int)
+    session_summary["Prev_Fatigue"] = by_exercise["Had_Fatigue"].shift().fillna(0).astype(int)
+    session_summary["Prev_Rep_Consistency"] = by_exercise["Rep_Consistency"].shift().fillna(1.0)
 
     # Positive momentum = 1RM is trending upward; negative = declining capacity.
     session_summary["RM_Momentum"] = session_summary.groupby("Exercise")[

@@ -10,28 +10,35 @@ ApiService _serviceWith(http.Response Function(http.Request) handler) =>
     ApiService(client: MockClient((req) async => handler(req)));
 
 ApiService _serviceWithStreamed(
-        http.StreamedResponse Function(http.BaseRequest) handler) =>
-    ApiService(client: MockClient.streaming((req, __) async => handler(req)));
+  http.StreamedResponse Function(http.BaseRequest) handler,
+) => ApiService(client: MockClient.streaming((req, __) async => handler(req)));
 
-final _csvBytes = Uint8List.fromList('Date,Exercise\n2026-01-01,Squat'.codeUnits);
+final _csvBytes = Uint8List.fromList(
+  'Date,Exercise\n2026-01-01,Squat'.codeUnits,
+);
 
 void main() {
   group('ApiService.getRecommendation', () {
     test('200 returns a parsed Recommendation', () async {
-      final api = _serviceWith((_) => http.Response(
-            jsonEncode({
-              'target_reps': 8,
-              'target_weight': 135.0,
-              'status': 'PROGRESSION: Weight Increased',
-              'predicted_1rm': 161.0,
-              'required_1rm': 155.0,
-              'notes_insight': 'Good momentum!',
-            }),
-            200,
-          ));
+      final api = _serviceWith(
+        (_) => http.Response(
+          jsonEncode({
+            'target_reps': 8,
+            'target_weight': 135.0,
+            'status': 'PROGRESSION: Weight Increased',
+            'predicted_1rm': 161.0,
+            'required_1rm': 155.0,
+            'notes_insight': 'Good momentum!',
+          }),
+          200,
+        ),
+      );
 
-      final rec = await api.getRecommendation('Bench Press', 'Chest',
-          authToken: 'token');
+      final rec = await api.getRecommendation(
+        'Bench Press',
+        'Chest',
+        authToken: 'token',
+      );
       expect(rec, isNotNull);
       expect(rec!.targetWeight, 135.0);
       expect(rec.targetReps, 8);
@@ -116,10 +123,12 @@ void main() {
 
   group('ApiService.trainFromCsvBytes', () {
     test('200 completes without throwing', () async {
-      final api = _serviceWithStreamed((_) => http.StreamedResponse(
-            Stream.value(utf8.encode('{"message":"ok"}')),
-            200,
-          ));
+      final api = _serviceWithStreamed(
+        (_) => http.StreamedResponse(
+          Stream.value(utf8.encode('{"message":"ok"}')),
+          200,
+        ),
+      );
       await expectLater(
         api.trainFromCsvBytes(_csvBytes, authToken: 'token'),
         completes,
@@ -127,62 +136,67 @@ void main() {
     });
 
     test('401 throws with sign-in message', () async {
-      final api = _serviceWithStreamed((_) => http.StreamedResponse(
-            Stream.value(utf8.encode('unauthorized')),
-            401,
-          ));
+      final api = _serviceWithStreamed(
+        (_) => http.StreamedResponse(
+          Stream.value(utf8.encode('unauthorized')),
+          401,
+        ),
+      );
       expect(
         () => api.trainFromCsvBytes(_csvBytes, authToken: 'token'),
-        throwsA(predicate<Exception>(
-            (e) => e.toString().contains('sign in'))),
+        throwsA(predicate<Exception>((e) => e.toString().contains('sign in'))),
       );
     });
 
     test('403 throws with premium message', () async {
-      final api = _serviceWithStreamed((_) => http.StreamedResponse(
-            Stream.value(utf8.encode('forbidden')),
-            403,
-          ));
+      final api = _serviceWithStreamed(
+        (_) =>
+            http.StreamedResponse(Stream.value(utf8.encode('forbidden')), 403),
+      );
       expect(
         () => api.trainFromCsvBytes(_csvBytes, authToken: 'token'),
-        throwsA(predicate<Exception>(
-            (e) => e.toString().contains('Premium'))),
+        throwsA(predicate<Exception>((e) => e.toString().contains('Premium'))),
       );
     });
 
     test('409 throws with in-progress message', () async {
-      final api = _serviceWithStreamed((_) => http.StreamedResponse(
-            Stream.value(utf8.encode('conflict')),
-            409,
-          ));
+      final api = _serviceWithStreamed(
+        (_) =>
+            http.StreamedResponse(Stream.value(utf8.encode('conflict')), 409),
+      );
       expect(
         () => api.trainFromCsvBytes(_csvBytes, authToken: 'token'),
-        throwsA(predicate<Exception>(
-            (e) => e.toString().contains('in progress'))),
+        throwsA(
+          predicate<Exception>((e) => e.toString().contains('in progress')),
+        ),
       );
     });
 
     test('413 throws with too-large message', () async {
-      final api = _serviceWithStreamed((_) => http.StreamedResponse(
-            Stream.value(utf8.encode('too large')),
-            413,
-          ));
+      final api = _serviceWithStreamed(
+        (_) =>
+            http.StreamedResponse(Stream.value(utf8.encode('too large')), 413),
+      );
       expect(
         () => api.trainFromCsvBytes(_csvBytes, authToken: 'token'),
-        throwsA(predicate<Exception>(
-            (e) => e.toString().contains('too large'))),
+        throwsA(
+          predicate<Exception>((e) => e.toString().contains('too large')),
+        ),
       );
     });
 
     test('500 throws with body in message', () async {
-      final api = _serviceWithStreamed((_) => http.StreamedResponse(
-            Stream.value(utf8.encode('server exploded')),
-            500,
-          ));
+      final api = _serviceWithStreamed(
+        (_) => http.StreamedResponse(
+          Stream.value(utf8.encode('server exploded')),
+          500,
+        ),
+      );
       expect(
         () => api.trainFromCsvBytes(_csvBytes, authToken: 'token'),
-        throwsA(predicate<Exception>(
-            (e) => e.toString().contains('server exploded'))),
+        throwsA(
+          predicate<Exception>((e) => e.toString().contains('server exploded')),
+        ),
       );
     });
   });
@@ -190,18 +204,14 @@ void main() {
   group('ApiService.deleteUserData', () {
     test('200 completes without throwing', () async {
       final api = _serviceWith((_) => http.Response('{"message":"ok"}', 200));
-      await expectLater(
-        api.deleteUserData(authToken: 'token'),
-        completes,
-      );
+      await expectLater(api.deleteUserData(authToken: 'token'), completes);
     });
 
     test('non-200 throws with status code', () async {
       final api = _serviceWith((_) => http.Response('error', 500));
       expect(
         () => api.deleteUserData(authToken: 'token'),
-        throwsA(predicate<Exception>(
-            (e) => e.toString().contains('500'))),
+        throwsA(predicate<Exception>((e) => e.toString().contains('500'))),
       );
     });
 

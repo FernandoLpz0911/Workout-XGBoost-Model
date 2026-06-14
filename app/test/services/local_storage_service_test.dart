@@ -29,15 +29,14 @@ void main() {
     double weight = 135.0,
     int reps = 8,
     String comment = '',
-  }) =>
-      WorkoutSet(
-        date: date ?? DateTime(2026, 1, 15, 10, 0, 0),
-        exercise: exercise,
-        category: category,
-        weight: weight,
-        reps: reps,
-        comment: comment,
-      );
+  }) => WorkoutSet(
+    date: date ?? DateTime(2026, 1, 15, 10, 0, 0),
+    exercise: exercise,
+    category: category,
+    weight: weight,
+    reps: reps,
+    comment: comment,
+  );
   group('loadAll', () {
     test('returns empty list when storage is empty', () async {
       expect(await storage.loadAll(), isEmpty);
@@ -53,8 +52,10 @@ void main() {
       expect(loaded.first.exercise, set.exercise);
       expect(loaded.first.weight, set.weight);
       expect(loaded.first.reps, set.reps);
-      expect(loaded.first.date.millisecondsSinceEpoch,
-          set.date.millisecondsSinceEpoch);
+      expect(
+        loaded.first.date.millisecondsSinceEpoch,
+        set.date.millisecondsSinceEpoch,
+      );
     });
 
     test('persists and restores a cardio set', () async {
@@ -92,8 +93,13 @@ void main() {
     test('persists multiple sets in insertion order', () async {
       final sets = [
         strengthSet(date: DateTime(2026, 1, 1)),
-        strengthSet(date: DateTime(2026, 1, 2), exercise: 'Squat',
-            category: 'Legs', weight: 200, reps: 5),
+        strengthSet(
+          date: DateTime(2026, 1, 2),
+          exercise: 'Squat',
+          category: 'Legs',
+          weight: 200,
+          reps: 5,
+        ),
       ];
       await storage.appendSets(sets);
       final loaded = await storage.loadAll();
@@ -154,10 +160,13 @@ void main() {
     test('produces CSV with the correct FitNotes header', () async {
       await storage.appendSets([strengthSet()]);
       final csv = String.fromCharCodes(await storage.exportAsCsvBytes());
-      expect(csv, startsWith(
-        'Date,Exercise,Category,Weight,Weight Unit,Reps,'
-        'Distance,Distance Unit,Time,Comment',
-      ));
+      expect(
+        csv,
+        startsWith(
+          'Date,Exercise,Category,Weight,Weight Unit,Reps,'
+          'Distance,Distance Unit,Time,Comment',
+        ),
+      );
     });
 
     test('CSV contains the stored exercise name and weight', () async {
@@ -172,7 +181,8 @@ void main() {
       expect(csv.split('\n').length, 1);
     });
   });
-  const validCsv = '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
+  const validCsv =
+      '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
 2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,good session
 2026-01-15,Squat,Legs,200.0,lbs,5,,,,
 ''';
@@ -192,10 +202,12 @@ void main() {
     });
 
     test('imports only the new rows on a partial overlap', () async {
-      const firstBatch = '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
+      const firstBatch =
+          '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
 2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,
 ''';
-      const secondBatch = '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
+      const secondBatch =
+          '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
 2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,
 2026-01-16,Squat,Legs,200.0,lbs,5,,,,
 ''';
@@ -211,13 +223,16 @@ void main() {
       expect(await storage.importFromCsvText(headerOnly), 0);
     });
 
-    test('skips rows where weight, reps, distance, and duration are all absent',
-        () async {
-      const emptyRow = '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
+    test(
+      'skips rows where weight, reps, distance, and duration are all absent',
+      () async {
+        const emptyRow =
+            '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
 2026-01-15,Mystery,Core,0,lbs,0,,,,"no data"
 ''';
-      expect(await storage.importFromCsvText(emptyRow), 0);
-    });
+        expect(await storage.importFromCsvText(emptyRow), 0);
+      },
+    );
 
     test('parses comment correctly', () async {
       final loaded = await storage
@@ -228,7 +243,8 @@ void main() {
     });
 
     test('handles quoted fields that contain commas', () async {
-      const csv = '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
+      const csv =
+          '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
 2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,"form good, felt strong"
 ''';
       await storage.importFromCsvText(csv);
@@ -237,7 +253,8 @@ void main() {
     });
 
     test('handles escaped double-quotes inside a field', () async {
-      const csv = '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
+      const csv =
+          '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
 2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,"felt ""great"" today"
 ''';
       await storage.importFromCsvText(csv);
@@ -246,7 +263,8 @@ void main() {
     });
 
     test('imports cardio rows with distance and duration', () async {
-      const csv = '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
+      const csv =
+          '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
 2026-03-01,General Running,Cardio,0,lbs,0,3.14,mi,0:28:00,
 ''';
       final count = await storage.importFromCsvText(csv);
@@ -295,10 +313,13 @@ void main() {
       expect(await storage.loadTrainingModes(), isEmpty);
     });
 
-    test('exercises with no entry are absent (not defaulted by storage)', () async {
-      await storage.saveTrainingModes({'Squat': 'strength'});
-      final loaded = await storage.loadTrainingModes();
-      expect(loaded.containsKey('Bench Press'), isFalse);
-    });
+    test(
+      'exercises with no entry are absent (not defaulted by storage)',
+      () async {
+        await storage.saveTrainingModes({'Squat': 'strength'});
+        final loaded = await storage.loadTrainingModes();
+        expect(loaded.containsKey('Bench Press'), isFalse);
+      },
+    );
   });
 }

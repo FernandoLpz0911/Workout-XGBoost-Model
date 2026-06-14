@@ -5,15 +5,17 @@ class LegalView extends StatelessWidget {
   final String body;
   const LegalView({super.key, required this.title, required this.body});
 
-  static void showPrivacy(BuildContext context) =>
-      Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => LegalView(
-              title: 'Privacy Policy', body: _kPrivacyPolicy)));
+  static void showPrivacy(BuildContext context) => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => LegalView(title: 'Privacy Policy', body: _kPrivacyPolicy),
+    ),
+  );
 
-  static void showTerms(BuildContext context) =>
-      Navigator.of(context).push(MaterialPageRoute(
-          builder: (_) => LegalView(
-              title: 'Terms of Service', body: _kTerms)));
+  static void showTerms(BuildContext context) => Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => LegalView(title: 'Terms of Service', body: _kTerms),
+    ),
+  );
 
   @override
   Widget build(BuildContext context) {
@@ -29,8 +31,7 @@ class LegalView extends StatelessWidget {
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
         child: Text(
           body,
-          style: const TextStyle(
-              color: Colors.grey, fontSize: 13, height: 1.7),
+          style: const TextStyle(color: Colors.grey, fontSize: 13, height: 1.7),
         ),
       ),
     );

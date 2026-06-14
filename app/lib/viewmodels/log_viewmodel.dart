@@ -25,7 +25,9 @@ Recommendation _computeRec(_RecParams p) {
     exercise: p.exercise,
     category: p.category,
     allHistory: sets,
-    mode: p.mode == 'strength' ? TrainingMode.strength : TrainingMode.hypertrophy,
+    mode: p.mode == 'strength'
+        ? TrainingMode.strength
+        : TrainingMode.hypertrophy,
   );
 }
 
@@ -97,48 +99,91 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   static const _presetExercises = <String, List<String>>{
     'Back': [
-      'Barbell Row', 'Deadlift', 'Face Pull', 'Hyperextension',
-      'Lat Pulldown', 'Pull Up', 'Seated Cable Row',
-      'Single Arm Dumbbell Row', 'T-Bar Row',
+      'Barbell Row',
+      'Deadlift',
+      'Face Pull',
+      'Hyperextension',
+      'Lat Pulldown',
+      'Pull Up',
+      'Seated Cable Row',
+      'Single Arm Dumbbell Row',
+      'T-Bar Row',
     ],
     'Biceps': [
-      'Barbell Curl', 'Cable Curl', 'Concentration Curl',
-      'Dumbbell Curl', 'EZ Bar Curl', 'Hammer Curl',
-      'Incline Dumbbell Curl', 'Preacher Curl',
+      'Barbell Curl',
+      'Cable Curl',
+      'Concentration Curl',
+      'Dumbbell Curl',
+      'EZ Bar Curl',
+      'Hammer Curl',
+      'Incline Dumbbell Curl',
+      'Preacher Curl',
     ],
     'Cardio': [
-      'Cycling', 'Elliptical', 'General Running', 'Jump Rope',
-      'Rowing Machine', 'Stair Climber', 'Swimming',
+      'Cycling',
+      'Elliptical',
+      'General Running',
+      'Jump Rope',
+      'Rowing Machine',
+      'Stair Climber',
+      'Swimming',
     ],
     'Chest': [
-      'Bench Press', 'Cable Fly', 'Chest Dip', 'Decline Bench Press',
-      'Dumbbell Fly', 'Incline Bench Press', 'Incline Dumbbell Press',
-      'Pec Deck', 'Push Up',
+      'Bench Press',
+      'Cable Fly',
+      'Chest Dip',
+      'Decline Bench Press',
+      'Dumbbell Fly',
+      'Incline Bench Press',
+      'Incline Dumbbell Press',
+      'Pec Deck',
+      'Push Up',
     ],
     'Core': [
-      'Ab Wheel', 'Cable Crunch', 'Crunch', 'Hanging Leg Raise',
-      'Leg Raise', 'Plank', 'Russian Twist', 'Side Plank',
+      'Ab Wheel',
+      'Cable Crunch',
+      'Crunch',
+      'Hanging Leg Raise',
+      'Leg Raise',
+      'Plank',
+      'Russian Twist',
+      'Side Plank',
     ],
     'Forearms': [
-      'Barbell Wrist Curl', 'Farmer\'s Walk', 'Reverse Curl',
+      'Barbell Wrist Curl',
+      'Farmer\'s Walk',
+      'Reverse Curl',
       'Reverse Wrist Curl',
     ],
     'Legs': [
-      'Bulgarian Split Squat', 'Calf Raise', 'Glute Bridge',
-      'Hack Squat', 'Leg Curl', 'Leg Extension', 'Leg Press',
-      'Lunge', 'Romanian Deadlift', 'Squat',
+      'Bulgarian Split Squat',
+      'Calf Raise',
+      'Glute Bridge',
+      'Hack Squat',
+      'Leg Curl',
+      'Leg Extension',
+      'Leg Press',
+      'Lunge',
+      'Romanian Deadlift',
+      'Squat',
     ],
-    'Passive': [
-      'Foam Rolling', 'Ice Bath', 'Sauna', 'Stretching',
-    ],
+    'Passive': ['Foam Rolling', 'Ice Bath', 'Sauna', 'Stretching'],
     'Shoulders': [
-      'Arnold Press', 'Front Raise', 'Lateral Raise',
-      'Overhead Press', 'Rear Delt Fly', 'Shrug', 'Upright Row',
+      'Arnold Press',
+      'Front Raise',
+      'Lateral Raise',
+      'Overhead Press',
+      'Rear Delt Fly',
+      'Shrug',
+      'Upright Row',
     ],
     'Triceps': [
-      'Cable Tricep Pushdown', 'Close Grip Bench Press',
-      'Diamond Push Up', 'Overhead Tricep Extension',
-      'Skull Crusher', 'Tricep Dip',
+      'Cable Tricep Pushdown',
+      'Close Grip Bench Press',
+      'Diamond Push Up',
+      'Overhead Tricep Extension',
+      'Skull Crusher',
+      'Tricep Dip',
     ],
   };
 
@@ -202,7 +247,9 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     final raw = await _storage.loadTrainingModes();
     _trainingModes = raw.map(
       (k, v) => MapEntry(
-          k, v == 'strength' ? TrainingMode.strength : TrainingMode.hypertrophy),
+        k,
+        v == 'strength' ? TrainingMode.strength : TrainingMode.hypertrophy,
+      ),
     );
   }
 
@@ -225,14 +272,13 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void _loadTodaySession() {
     session.clear();
     final today = _fmtDate(DateTime.now());
-    final todaySets = history
-        .where((s) => _fmtDate(s.date) == today)
-        .toList()
+    final todaySets = history.where((s) => _fmtDate(s.date) == today).toList()
       ..sort((a, b) => a.date.compareTo(b.date));
 
     for (final s in todaySets) {
       var idx = session.indexWhere(
-          (e) => e.exercise == s.exercise && e.category == s.category);
+        (e) => e.exercise == s.exercise && e.category == s.category,
+      );
       if (idx == -1) {
         final ex = SessionExercise(
           exercise: s.exercise,
@@ -254,7 +300,9 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
         if (sep == -1) continue;
         final exercise = entry.substring(0, sep);
         final category = entry.substring(sep + 3);
-        if (!session.any((e) => e.exercise == exercise && e.category == category)) {
+        if (!session.any(
+          (e) => e.exercise == exercise && e.category == category,
+        )) {
           final ex = SessionExercise(
             exercise: exercise,
             category: category,
@@ -298,31 +346,33 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
             .toList(),
         ex.trainingMode.name,
       );
-      compute(_computeRec, params).then((rec) {
-        if (!hasListeners) return;
-        ex.recommendation = rec;
-        notifyListeners();
-      }).catchError((_) {
-        if (!hasListeners) return;
-        ex.recError = 'Could not compute recommendation.';
-        notifyListeners();
-      });
+      compute(_computeRec, params)
+          .then((rec) {
+            if (!hasListeners) return;
+            ex.recommendation = rec;
+            notifyListeners();
+          })
+          .catchError((_) {
+            if (!hasListeners) return;
+            ex.recError = 'Could not compute recommendation.';
+            notifyListeners();
+          });
     } else {
       ex.lastSessionSummary = _lastSessionSummary(ex.exercise, ex.category);
     }
   }
 
   String _lastSessionSummary(String exercise, String category) {
-    final sets = history
-        .where((s) => s.exercise == exercise)
-        .toList()
+    final sets = history.where((s) => s.exercise == exercise).toList()
       ..sort((a, b) => b.date.compareTo(a.date));
     if (sets.isEmpty) return '';
     final lastDate = _fmtDate(sets.first.date);
     final lastSets = sets.where((s) => _fmtDate(s.date) == lastDate).toList();
     if (exerciseTypeOf(category) == ExerciseType.cardio) {
-      final totalDist =
-          lastSets.fold(0.0, (acc, s) => acc + (s.distance ?? 0.0));
+      final totalDist = lastSets.fold(
+        0.0,
+        (acc, s) => acc + (s.distance ?? 0.0),
+      );
       final unit = lastSets.first.distanceUnit ?? 'mi';
       return '${lastSets.length} lap${lastSets.length == 1 ? '' : 's'} · '
           '${totalDist.toStringAsFixed(2)} $unit';
@@ -332,8 +382,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void addExercise(String category, String exercise) {
-    if (session.any(
-        (e) => e.exercise == exercise && e.category == category)) {
+    if (session.any((e) => e.exercise == exercise && e.category == category)) {
       return;
     }
     final ex = SessionExercise(
@@ -367,9 +416,11 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   void removeSet(int exerciseIndex, int setIndex) {
     final set = session[exerciseIndex].sets.removeAt(setIndex);
-    history.removeWhere((s) =>
-        s.date.millisecondsSinceEpoch == set.date.millisecondsSinceEpoch &&
-        s.exercise == set.exercise);
+    history.removeWhere(
+      (s) =>
+          s.date.millisecondsSinceEpoch == set.date.millisecondsSinceEpoch &&
+          s.exercise == set.exercise,
+    );
     _invalidateHistoryCache();
     localSetCount--;
     notifyListeners();
@@ -379,9 +430,11 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void updateSet(int exerciseIndex, int setIndex, WorkoutSet updated) {
     final old = session[exerciseIndex].sets[setIndex];
     session[exerciseIndex].sets[setIndex] = updated;
-    final hi = history.indexWhere((s) =>
-        s.date.millisecondsSinceEpoch == old.date.millisecondsSinceEpoch &&
-        s.exercise == old.exercise);
+    final hi = history.indexWhere(
+      (s) =>
+          s.date.millisecondsSinceEpoch == old.date.millisecondsSinceEpoch &&
+          s.exercise == old.exercise,
+    );
     if (hi != -1) history[hi] = updated;
     _invalidateHistoryCache();
     _applyRec(session[exerciseIndex]);
@@ -393,9 +446,11 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     final sets = List<WorkoutSet>.from(session[index].sets);
     session.removeAt(index);
     for (final s in sets) {
-      history.removeWhere((h) =>
-          h.date.millisecondsSinceEpoch == s.date.millisecondsSinceEpoch &&
-          h.exercise == s.exercise);
+      history.removeWhere(
+        (h) =>
+            h.date.millisecondsSinceEpoch == s.date.millisecondsSinceEpoch &&
+            h.exercise == s.exercise,
+      );
       _storage.deleteSet(s);
     }
     _invalidateHistoryCache();

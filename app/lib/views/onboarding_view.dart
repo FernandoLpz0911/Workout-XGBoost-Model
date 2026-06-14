@@ -70,7 +70,9 @@ class _OnboardingViewState extends State<OnboardingView> {
   void _next() {
     if (_page < _pages.length - 1) {
       _controller.nextPage(
-          duration: const Duration(milliseconds: 300), curve: Curves.easeOut);
+        duration: const Duration(milliseconds: 300),
+        curve: Curves.easeOut,
+      );
     } else {
       _finish();
     }
@@ -99,8 +101,7 @@ class _OnboardingViewState extends State<OnboardingView> {
               alignment: Alignment.centerRight,
               child: TextButton(
                 onPressed: _finish,
-                child: const Text('Skip',
-                    style: TextStyle(color: Colors.grey)),
+                child: const Text('Skip', style: TextStyle(color: Colors.grey)),
               ),
             ),
             Expanded(
@@ -124,11 +125,16 @@ class _OnboardingViewState extends State<OnboardingView> {
                     backgroundColor: Colors.redAccent,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12)),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                   ),
-                  child: Text(isLast ? 'Get Started' : 'Next',
-                      style: const TextStyle(
-                          fontSize: 16, fontWeight: FontWeight.bold)),
+                  child: Text(
+                    isLast ? 'Get Started' : 'Next',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
                 ),
               ),
             ),
@@ -171,15 +177,21 @@ class _OnboardingPage extends StatelessWidget {
             child: Icon(icon, size: 48, color: iconColor),
           ),
           const SizedBox(height: 36),
-          Text(title,
-              style: const TextStyle(
-                  fontSize: 26, fontWeight: FontWeight.bold),
-              textAlign: TextAlign.center),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold),
+            textAlign: TextAlign.center,
+          ),
           const SizedBox(height: 16),
-          Text(body,
-              style: const TextStyle(
-                  fontSize: 15, color: Colors.grey, height: 1.6),
-              textAlign: TextAlign.center),
+          Text(
+            body,
+            style: const TextStyle(
+              fontSize: 15,
+              color: Colors.grey,
+              height: 1.6,
+            ),
+            textAlign: TextAlign.center,
+          ),
         ],
       ),
     );

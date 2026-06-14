@@ -61,7 +61,9 @@ class _RootGateState extends State<_RootGate> {
   @override
   void initState() {
     super.initState();
-    isOnboardingDone().then((v) { if (mounted) setState(() => _done = v); });
+    isOnboardingDone().then((v) {
+      if (mounted) setState(() => _done = v);
+    });
   }
 
   @override
@@ -294,8 +296,9 @@ class _TimerSheet extends StatelessWidget {
                     Expanded(
                       child: Slider(
                         value: timer.volume,
-                        onChanged:
-                            timer.soundEnabled ? (v) => timer.volume = v : null,
+                        onChanged: timer.soundEnabled
+                            ? (v) => timer.volume = v
+                            : null,
                       ),
                     ),
                   ],
@@ -365,8 +368,11 @@ class _SettingCheck extends StatelessWidget {
   final String label;
   final bool value;
   final ValueChanged<bool> onChanged;
-  const _SettingCheck(
-      {required this.label, required this.value, required this.onChanged});
+  const _SettingCheck({
+    required this.label,
+    required this.value,
+    required this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {

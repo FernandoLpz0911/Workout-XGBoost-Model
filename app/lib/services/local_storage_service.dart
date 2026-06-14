@@ -81,8 +81,11 @@ class LocalStorageService {
     final db = await _database;
     final batch = db.batch();
     for (final s in newSets) {
-      batch.insert('sets', _setToRow(s),
-          conflictAlgorithm: ConflictAlgorithm.ignore);
+      batch.insert(
+        'sets',
+        _setToRow(s),
+        conflictAlgorithm: ConflictAlgorithm.ignore,
+      );
     }
     await batch.commit(noResult: true);
   }
@@ -106,18 +109,27 @@ class LocalStorageService {
   /// O(1) delete using the fingerprint primary key.
   Future<void> deleteSet(WorkoutSet target) async {
     final db = await _database;
-    await db.delete('sets',
-        where: 'fingerprint = ?', whereArgs: [fingerprintFor(target)]);
+    await db.delete(
+      'sets',
+      where: 'fingerprint = ?',
+      whereArgs: [fingerprintFor(target)],
+    );
   }
 
   /// O(1) update: delete old row by fingerprint, insert updated row.
   Future<void> updateSet(WorkoutSet old, WorkoutSet updated) async {
     final db = await _database;
     await db.transaction((txn) async {
-      await txn.delete('sets',
-          where: 'fingerprint = ?', whereArgs: [fingerprintFor(old)]);
-      await txn.insert('sets', _setToRow(updated),
-          conflictAlgorithm: ConflictAlgorithm.replace);
+      await txn.delete(
+        'sets',
+        where: 'fingerprint = ?',
+        whereArgs: [fingerprintFor(old)],
+      );
+      await txn.insert(
+        'sets',
+        _setToRow(updated),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
     });
   }
 
@@ -144,12 +156,13 @@ class LocalStorageService {
 
         final weight = double.tryParse(p[3].trim()) ?? 0.0;
         final reps = int.tryParse(p[5].trim()) ?? 0;
-        final distance =
-            p.length > 6 ? double.tryParse(p[6].trim()) : null;
-        final distanceUnit =
-            (p.length > 7 && p[7].trim().isNotEmpty) ? p[7].trim() : null;
-        final duration =
-            (p.length > 8 && p[8].trim().isNotEmpty) ? p[8].trim() : null;
+        final distance = p.length > 6 ? double.tryParse(p[6].trim()) : null;
+        final distanceUnit = (p.length > 7 && p[7].trim().isNotEmpty)
+            ? p[7].trim()
+            : null;
+        final duration = (p.length > 8 && p[8].trim().isNotEmpty)
+            ? p[8].trim()
+            : null;
         final comment = p.length > 9 ? p[9].trim() : '';
 
         final hasStrength = weight > 0 || reps > 0;
@@ -157,17 +170,19 @@ class LocalStorageService {
         final hasDuration = duration != null;
         if (!hasStrength && !hasCardio && !hasDuration) continue;
 
-        newSets.add(WorkoutSet(
-          date: DateTime.parse(p[0].trim()),
-          exercise: p[1].trim(),
-          category: p[2].trim(),
-          weight: weight,
-          reps: reps,
-          distance: distance,
-          distanceUnit: distanceUnit,
-          duration: duration,
-          comment: comment,
-        ));
+        newSets.add(
+          WorkoutSet(
+            date: DateTime.parse(p[0].trim()),
+            exercise: p[1].trim(),
+            category: p[2].trim(),
+            weight: weight,
+            reps: reps,
+            distance: distance,
+            distanceUnit: distanceUnit,
+            duration: duration,
+            comment: comment,
+          ),
+        );
       } catch (_) {
         continue;
       }
@@ -204,29 +219,29 @@ class LocalStorageService {
   }
 
   static Map<String, dynamic> _setToRow(WorkoutSet s) => {
-        'fingerprint': fingerprintFor(s),
-        'date_iso': s.date.toIso8601String(),
-        'exercise': s.exercise,
-        'category': s.category,
-        'weight': s.weight,
-        'reps': s.reps,
-        'distance': s.distance,
-        'distance_unit': s.distanceUnit,
-        'duration': s.duration,
-        'comment': s.comment,
-      };
+    'fingerprint': fingerprintFor(s),
+    'date_iso': s.date.toIso8601String(),
+    'exercise': s.exercise,
+    'category': s.category,
+    'weight': s.weight,
+    'reps': s.reps,
+    'distance': s.distance,
+    'distance_unit': s.distanceUnit,
+    'duration': s.duration,
+    'comment': s.comment,
+  };
 
   static WorkoutSet _rowToSet(Map<String, dynamic> row) => WorkoutSet(
-        date: DateTime.parse(row['date_iso'] as String),
-        exercise: row['exercise'] as String,
-        category: row['category'] as String,
-        weight: (row['weight'] as num).toDouble(),
-        reps: row['reps'] as int,
-        distance: (row['distance'] as num?)?.toDouble(),
-        distanceUnit: row['distance_unit'] as String?,
-        duration: row['duration'] as String?,
-        comment: row['comment'] as String? ?? '',
-      );
+    date: DateTime.parse(row['date_iso'] as String),
+    exercise: row['exercise'] as String,
+    category: row['category'] as String,
+    weight: (row['weight'] as num).toDouble(),
+    reps: row['reps'] as int,
+    distance: (row['distance'] as num?)?.toDouble(),
+    distanceUnit: row['distance_unit'] as String?,
+    duration: row['duration'] as String?,
+    comment: row['comment'] as String? ?? '',
+  );
 
   static List<String> _parseCsvLine(String line) {
     final result = <String>[];

@@ -115,9 +115,7 @@ def _delete_firestore_collection(col_ref, batch_size: int = 400) -> None:
         batch.commit()
 
 
-def _save_user_model(
-    uid: str, model, feature_cols: list, session_summary: pd.DataFrame
-) -> None:
+def _save_user_model(uid: str, model, feature_cols: list, session_summary: pd.DataFrame) -> None:
     """Upload model artifacts to GCS and warm the in-process cache.
 
     Three files are stored per user: the XGBoost model, the feature column
@@ -139,9 +137,7 @@ def _save_user_model(
         )
 
     csv_buf = io.BytesIO(session_summary.to_csv(index=False).encode())
-    bucket.blob(f"{prefix}/workout_summary.csv").upload_from_file(
-        csv_buf, content_type="text/csv"
-    )
+    bucket.blob(f"{prefix}/workout_summary.csv").upload_from_file(csv_buf, content_type="text/csv")
 
     _evict_model_cache()
     _model_cache[uid] = (model, feature_cols, session_summary)
@@ -179,9 +175,7 @@ def _load_user_model(uid: str) -> tuple | None:
             io.BytesIO(bucket.blob(f"{prefix}/feature_cols.joblib").download_as_bytes())
         )
         session_summary = pd.read_csv(
-            io.BytesIO(
-                bucket.blob(f"{prefix}/workout_summary.csv").download_as_bytes()
-            ),
+            io.BytesIO(bucket.blob(f"{prefix}/workout_summary.csv").download_as_bytes()),
             parse_dates=["Date"],
         )
 
@@ -325,12 +319,7 @@ def get_exercises(uid: str = Depends(get_uid)):
         raise HTTPException(404, "No trained model. Upload CSV via /train.")
     _, _, session_summary = assets
     try:
-        return (
-            session_summary.groupby("Category")["Exercise"]
-            .unique()
-            .apply(list)
-            .to_dict()
-        )
+        return session_summary.groupby("Category")["Exercise"].unique().apply(list).to_dict()
     except Exception as exc:
         raise HTTPException(500, str(exc)) from exc
 
@@ -453,16 +442,12 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
     # Strength: lower rep targets, larger weight increments (5 lb jumps).
     # Hypertrophy: higher rep targets, smaller increments (2.5 lb jumps).
     is_strength_mode = req.mode == "strength"
-    graduation_reps = (
-        6 if is_strength_mode else 12
-    )  # reps needed to earn a weight increase
+    graduation_reps = 6 if is_strength_mode else 12  # reps needed to earn a weight increase
     baseline_reps = 5 if is_strength_mode else 10  # reps suggested after a weight jump
     stabilization_threshold = (
         3 if is_strength_mode else 8
     )  # reps below which we stop weight progress
-    stabilization_reps = (
-        4 if is_strength_mode else 10
-    )  # reps target while building rep capacity
+    stabilization_reps = 4 if is_strength_mode else 10  # reps target while building rep capacity
     volume_reps = 6 if is_strength_mode else 12  # reps target in the "push" zone
     weight_increment = 5.0 if is_strength_mode else 2.5
     mode_label = "STRENGTH" if is_strength_mode else "HYPERTROPHY"
@@ -511,9 +496,7 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
         if not is_plateaued and predicted_1rm < required_1rm * safety_threshold:
             # AI OVERRIDE: predicted capacity is too low for the planned load.
             # Scale weight to what the model thinks is achievable at target_reps.
-            target_weight = (
-                round(_epley_working_weight(predicted_1rm, target_reps) / 2.5) * 2.5
-            )
+            target_weight = round(_epley_working_weight(predicted_1rm, target_reps) / 2.5) * 2.5
             status = "AI OVERRIDE: Fatigue — weight adjusted for safety"
         else:
             status = progression_status
@@ -525,9 +508,7 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
     if is_plateaued:
         insights.append("No 1RM gain in 4 sessions. Deload to 60% to rebuild capacity.")
     if had_fatigue:
-        insights.append(
-            "Fatigue logged last session — consider a grip aid or extra rest."
-        )
+        insights.append("Fatigue logged last session — consider a grip aid or extra rest.")
     # Momentum thresholds: < -2 means the trend is meaningfully downward;
     # > 5 means genuine upward progress worth calling out.
     if one_rm_momentum < -2:
