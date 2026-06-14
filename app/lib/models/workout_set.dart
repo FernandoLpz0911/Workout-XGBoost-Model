@@ -96,8 +96,9 @@ class WorkoutSet {
     }
     if (distance != null && distance! > 0) {
       final unit = distanceUnit ?? 'mi';
-      if (duration != null)
+      if (duration != null) {
         return '${distance!.toStringAsFixed(2)} $unit @ $duration';
+      }
       return '${distance!.toStringAsFixed(2)} $unit';
     }
     return '${weight.toStringAsFixed(1)} lbs × $reps';
