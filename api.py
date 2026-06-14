@@ -91,8 +91,10 @@ def _training_status_ref(uid: str):
     """Return the Firestore document ref that tracks this user's training job."""
     return (
         admin_firestore.client()
-        .collection("users").document(uid)
-        .collection("trainingStatus").document("current")
+        .collection("users")
+        .document(uid)
+        .collection("trainingStatus")
+        .document("current")
     )
 
 
@@ -177,7 +179,9 @@ def _load_user_model(uid: str) -> tuple | None:
             io.BytesIO(bucket.blob(f"{prefix}/feature_cols.joblib").download_as_bytes())
         )
         session_summary = pd.read_csv(
-            io.BytesIO(bucket.blob(f"{prefix}/workout_summary.csv").download_as_bytes()),
+            io.BytesIO(
+                bucket.blob(f"{prefix}/workout_summary.csv").download_as_bytes()
+            ),
             parse_dates=["Date"],
         )
 
@@ -216,20 +220,24 @@ def _run_train(uid: str, csv_bytes: bytes) -> None:
         model, feature_cols, session_summary = run_pipeline(io.BytesIO(csv_bytes))
         _save_user_model(uid, model, feature_cols, session_summary)
         try:
-            status_ref.set({
-                "status": "complete",
-                "completedAt": admin_firestore.SERVER_TIMESTAMP,
-            })
+            status_ref.set(
+                {
+                    "status": "complete",
+                    "completedAt": admin_firestore.SERVER_TIMESTAMP,
+                }
+            )
         except Exception:  # noqa: BLE001
             pass
         print(f"Training complete for {uid}")
     except Exception as exc:  # noqa: BLE001
         try:
-            status_ref.set({
-                "status": "failed",
-                "error": str(exc),
-                "failedAt": admin_firestore.SERVER_TIMESTAMP,
-            })
+            status_ref.set(
+                {
+                    "status": "failed",
+                    "error": str(exc),
+                    "failedAt": admin_firestore.SERVER_TIMESTAMP,
+                }
+            )
         except Exception:  # noqa: BLE001
             pass
         print(f"Training error for {uid}: {exc}")
@@ -272,26 +280,29 @@ async def train_model(
                     return False
                 if datetime.now(timezone.utc) - started_at < _TRAIN_LOCK_TTL:
                     return False
-        transaction.set(training_status_ref, {
-            "status": "training",
-            "startedAt": admin_firestore.SERVER_TIMESTAMP,
-        })
+        transaction.set(
+            training_status_ref,
+            {
+                "status": "training",
+                "startedAt": admin_firestore.SERVER_TIMESTAMP,
+            },
+        )
         return True
 
     if not _claim_training_slot(db.transaction()):
-        raise HTTPException(
-            409, "Training already in progress for this account."
-        )
+        raise HTTPException(409, "Training already in progress for this account.")
 
     try:
         csv_bytes = await file.read()
     except Exception:
         try:
-            training_status_ref.set({
-                "status": "failed",
-                "error": "File upload failed.",
-                "failedAt": admin_firestore.SERVER_TIMESTAMP,
-            })
+            training_status_ref.set(
+                {
+                    "status": "failed",
+                    "error": "File upload failed.",
+                    "failedAt": admin_firestore.SERVER_TIMESTAMP,
+                }
+            )
         except Exception:  # noqa: BLE001
             pass
         raise HTTPException(400, "Failed to read uploaded file.")
@@ -299,8 +310,7 @@ async def train_model(
     if len(csv_bytes) > _MAX_CSV_BYTES:
         raise HTTPException(
             413,
-            f"File too large. Maximum size is "
-            f"{_MAX_CSV_BYTES // (1024 * 1024)} MB.",
+            f"File too large. Maximum size is {_MAX_CSV_BYTES // (1024 * 1024)} MB.",
         )
 
     background_tasks.add_task(_run_train, uid, csv_bytes)
@@ -317,7 +327,9 @@ def get_exercises(uid: str = Depends(get_uid)):
     try:
         return (
             session_summary.groupby("Category")["Exercise"]
-            .unique().apply(list).to_dict()
+            .unique()
+            .apply(list)
+            .to_dict()
         )
     except Exception as exc:
         raise HTTPException(500, str(exc)) from exc
@@ -429,8 +441,11 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
     # Back) tolerate heavier loads and are penalised less; smaller groups
     # (Shoulders, Arms) are more injury-prone so the threshold is tighter.
     safety_thresholds_by_category = {
-        "Legs": 0.95, "Chest": 0.95, "Back": 0.95,
-        "Shoulders": 0.90, "Arms": 0.85,
+        "Legs": 0.95,
+        "Chest": 0.95,
+        "Back": 0.95,
+        "Shoulders": 0.90,
+        "Arms": 0.85,
     }
     safety_threshold = safety_thresholds_by_category.get(req.category, 0.95)
 
@@ -438,11 +453,17 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
     # Strength: lower rep targets, larger weight increments (5 lb jumps).
     # Hypertrophy: higher rep targets, smaller increments (2.5 lb jumps).
     is_strength_mode = req.mode == "strength"
-    graduation_reps = 6 if is_strength_mode else 12    # reps needed to earn a weight increase
-    baseline_reps = 5 if is_strength_mode else 10       # reps suggested after a weight jump
-    stabilization_threshold = 3 if is_strength_mode else 8   # reps below which we stop weight progress
-    stabilization_reps = 4 if is_strength_mode else 10  # reps target while building rep capacity
-    volume_reps = 6 if is_strength_mode else 12          # reps target in the "push" zone
+    graduation_reps = (
+        6 if is_strength_mode else 12
+    )  # reps needed to earn a weight increase
+    baseline_reps = 5 if is_strength_mode else 10  # reps suggested after a weight jump
+    stabilization_threshold = (
+        3 if is_strength_mode else 8
+    )  # reps below which we stop weight progress
+    stabilization_reps = (
+        4 if is_strength_mode else 10
+    )  # reps target while building rep capacity
+    volume_reps = 6 if is_strength_mode else 12  # reps target in the "push" zone
     weight_increment = 5.0 if is_strength_mode else 2.5
     mode_label = "STRENGTH" if is_strength_mode else "HYPERTROPHY"
 
@@ -490,9 +511,9 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
         if not is_plateaued and predicted_1rm < required_1rm * safety_threshold:
             # AI OVERRIDE: predicted capacity is too low for the planned load.
             # Scale weight to what the model thinks is achievable at target_reps.
-            target_weight = round(
-                _epley_working_weight(predicted_1rm, target_reps) / 2.5
-            ) * 2.5
+            target_weight = (
+                round(_epley_working_weight(predicted_1rm, target_reps) / 2.5) * 2.5
+            )
             status = "AI OVERRIDE: Fatigue — weight adjusted for safety"
         else:
             status = progression_status
@@ -500,13 +521,9 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
     # Collect insight strings shown to the user below the recommendation.
     insights = []
     if had_form_issues:
-        insights.append(
-            "Form issues logged last session — prioritize technique today."
-        )
+        insights.append("Form issues logged last session — prioritize technique today.")
     if is_plateaued:
-        insights.append(
-            "No 1RM gain in 4 sessions. Deload to 60% to rebuild capacity."
-        )
+        insights.append("No 1RM gain in 4 sessions. Deload to 60% to rebuild capacity.")
     if had_fatigue:
         insights.append(
             "Fatigue logged last session — consider a grip aid or extra rest."

@@ -1,0 +1,16 @@
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# E: pycodestyle errors  F: pyflakes  I: isort  W: pycodestyle warnings
+select = ["E", "F", "I", "W"]
+ignore = [
+    "E501",  # line too long — handled by the formatter, not the linter
+]
+
+[tool.pytest.ini_options]
+# Add the project root to sys.path so `import api` and `import pipeline` work
+# whether pytest is invoked as `pytest` or `python -m pytest`.
+pythonpath = ["."]
+testpaths = ["tests"]

@@ -34,23 +34,31 @@ def _make_model_assets():
     model = MagicMock()
     model.predict.return_value = [150.0]
     feature_cols = [
-        "Days_Since_Last", "Previous_1RM", "Last_Avg_Reps",
-        "Prev_Volume_Load", "Prev_Rep_Consistency", "Prev_Form_Issue",
-        "Prev_Fatigue", "RM_Momentum",
-        "Exercise_Bench Press", "Category_Chest",
+        "Days_Since_Last",
+        "Previous_1RM",
+        "Last_Avg_Reps",
+        "Prev_Volume_Load",
+        "Prev_Rep_Consistency",
+        "Prev_Form_Issue",
+        "Prev_Fatigue",
+        "RM_Momentum",
+        "Exercise_Bench Press",
+        "Category_Chest",
     ]
-    summary = pd.DataFrame({
-        "Exercise": ["Bench Press"],
-        "Category": ["Chest"],
-        "Session_Max_1RM": [145.0],
-        "Days_Since_Last": [7.0],
-        "Max_Weight": [135.0],
-        "Avg_Reps": [8.0],
-        "Volume_Load": [3240.0],
-        "Rep_Consistency": [0.9],
-        "Had_Form_Issue": [0],
-        "Had_Fatigue": [0],
-    })
+    summary = pd.DataFrame(
+        {
+            "Exercise": ["Bench Press"],
+            "Category": ["Chest"],
+            "Session_Max_1RM": [145.0],
+            "Days_Since_Last": [7.0],
+            "Max_Weight": [135.0],
+            "Avg_Reps": [8.0],
+            "Volume_Load": [3240.0],
+            "Rep_Consistency": [0.9],
+            "Had_Form_Issue": [0],
+            "Had_Fatigue": [0],
+        }
+    )
     return model, feature_cols, summary
 
 
@@ -112,12 +120,14 @@ class TestTrainEndpoint:
             mock_ref_fn.return_value = mock_ref
 
             import sys
+
             gcp_firestore_mock = sys.modules["google.cloud.firestore"]
             original = gcp_firestore_mock.transactional
 
             def fake_transactional(fn):
                 def wrapper(txn):
                     return False  # always report slot taken
+
                 return wrapper
 
             gcp_firestore_mock.transactional = fake_transactional
@@ -256,10 +266,16 @@ class TestDeleteUserDataEndpoint:
 # ── /recommend decision-tree tests ───────────────────────────────────────────
 
 _DEFAULT_FEATURE_COLS = [
-    "Days_Since_Last", "Previous_1RM", "Last_Avg_Reps",
-    "Prev_Volume_Load", "Prev_Rep_Consistency", "Prev_Form_Issue",
-    "Prev_Fatigue", "RM_Momentum",
-    "Exercise_Bench Press", "Category_Chest",
+    "Days_Since_Last",
+    "Previous_1RM",
+    "Last_Avg_Reps",
+    "Prev_Volume_Load",
+    "Prev_Rep_Consistency",
+    "Prev_Form_Issue",
+    "Prev_Fatigue",
+    "RM_Momentum",
+    "Exercise_Bench Press",
+    "Category_Chest",
 ]
 
 
@@ -277,18 +293,20 @@ def _make_custom_assets(
     if summary_rows is not None:
         summary = pd.DataFrame(summary_rows)
     else:
-        summary = pd.DataFrame({
-            "Exercise": ["Bench Press"],
-            "Category": ["Chest"],
-            "Session_Max_1RM": [145.0],
-            "Days_Since_Last": [7.0],
-            "Max_Weight": [max_weight],
-            "Avg_Reps": [avg_reps],
-            "Volume_Load": [max_weight * avg_reps * 3],
-            "Rep_Consistency": [0.9],
-            "Had_Form_Issue": [had_form],
-            "Had_Fatigue": [had_fatigue],
-        })
+        summary = pd.DataFrame(
+            {
+                "Exercise": ["Bench Press"],
+                "Category": ["Chest"],
+                "Session_Max_1RM": [145.0],
+                "Days_Since_Last": [7.0],
+                "Max_Weight": [max_weight],
+                "Avg_Reps": [avg_reps],
+                "Volume_Load": [max_weight * avg_reps * 3],
+                "Rep_Consistency": [0.9],
+                "Had_Form_Issue": [had_form],
+                "Had_Fatigue": [had_fatigue],
+            }
+        )
     return model, _DEFAULT_FEATURE_COLS, summary
 
 
@@ -324,7 +342,9 @@ class TestRecommendLogic:
         assert "FORM FOCUS" in self._post().json()["status"]
 
     def test_form_focus_holds_weight(self):
-        _inject_model(UID, _make_custom_assets(had_form=1, max_weight=135.0, pred_1rm=300.0))
+        _inject_model(
+            UID, _make_custom_assets(had_form=1, max_weight=135.0, pred_1rm=300.0)
+        )
         assert self._post().json()["target_weight"] == pytest.approx(135.0)
 
     def test_form_focus_sets_hypertrophy_default_reps(self):
@@ -339,85 +359,124 @@ class TestRecommendLogic:
     # DELOAD ──────────────────────────────────────────────────────────────────
 
     def test_deload_status_when_plateau(self):
-        _inject_model(UID, _make_custom_assets(pred_1rm=300.0, summary_rows=_plateau_rows()))
+        _inject_model(
+            UID, _make_custom_assets(pred_1rm=300.0, summary_rows=_plateau_rows())
+        )
         assert "DELOAD" in self._post().json()["status"]
 
     def test_deload_sets_reps_to_15(self):
-        _inject_model(UID, _make_custom_assets(pred_1rm=300.0, summary_rows=_plateau_rows()))
+        _inject_model(
+            UID, _make_custom_assets(pred_1rm=300.0, summary_rows=_plateau_rows())
+        )
         assert self._post().json()["target_reps"] == 15
 
     def test_deload_reduces_weight_to_60_percent(self):
-        _inject_model(UID, _make_custom_assets(pred_1rm=300.0, summary_rows=_plateau_rows(max_weight=100.0)))
+        _inject_model(
+            UID,
+            _make_custom_assets(
+                pred_1rm=300.0, summary_rows=_plateau_rows(max_weight=100.0)
+            ),
+        )
         assert self._post().json()["target_weight"] < 100.0
 
     # HYPERTROPHY PROGRESSION ─────────────────────────────────────────────────
 
     def test_hypertrophy_progression_status(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=12.0, max_weight=135.0, pred_1rm=500.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=12.0, max_weight=135.0, pred_1rm=500.0)
+        )
         assert "PROGRESSION" in self._post().json()["status"]
 
     def test_hypertrophy_progression_increases_weight_by_2_5(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=12.0, max_weight=135.0, pred_1rm=500.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=12.0, max_weight=135.0, pred_1rm=500.0)
+        )
         assert self._post().json()["target_weight"] == pytest.approx(137.5)
 
     # STRENGTH PROGRESSION ────────────────────────────────────────────────────
 
     def test_strength_progression_status(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=6.0, max_weight=135.0, pred_1rm=500.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=6.0, max_weight=135.0, pred_1rm=500.0)
+        )
         assert "PROGRESSION" in self._post(mode="strength").json()["status"]
 
     def test_strength_progression_increases_weight_by_5(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=6.0, max_weight=135.0, pred_1rm=500.0))
-        assert self._post(mode="strength").json()["target_weight"] == pytest.approx(140.0)
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=6.0, max_weight=135.0, pred_1rm=500.0)
+        )
+        assert self._post(mode="strength").json()["target_weight"] == pytest.approx(
+            140.0
+        )
 
     # HYPERTROPHY STABILIZATION ───────────────────────────────────────────────
 
     def test_hypertrophy_stabilization_status(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=5.0, max_weight=135.0, pred_1rm=500.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=5.0, max_weight=135.0, pred_1rm=500.0)
+        )
         assert "STABILIZATION" in self._post().json()["status"]
 
     def test_hypertrophy_stabilization_holds_weight(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=5.0, max_weight=135.0, pred_1rm=500.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=5.0, max_weight=135.0, pred_1rm=500.0)
+        )
         assert self._post().json()["target_weight"] == pytest.approx(135.0)
 
     def test_hypertrophy_stabilization_sets_reps_to_10(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=5.0, max_weight=135.0, pred_1rm=500.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=5.0, max_weight=135.0, pred_1rm=500.0)
+        )
         assert self._post().json()["target_reps"] == 10
 
     # STRENGTH STABILIZATION ──────────────────────────────────────────────────
 
     def test_strength_stabilization_status(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=2.0, max_weight=135.0, pred_1rm=500.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=2.0, max_weight=135.0, pred_1rm=500.0)
+        )
         assert "STABILIZATION" in self._post(mode="strength").json()["status"]
 
     # VOLUME ──────────────────────────────────────────────────────────────────
 
     def test_hypertrophy_volume_status(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=9.0, max_weight=135.0, pred_1rm=500.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=9.0, max_weight=135.0, pred_1rm=500.0)
+        )
         assert "VOLUME" in self._post().json()["status"]
 
     def test_hypertrophy_volume_sets_target_reps_to_12(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=9.0, max_weight=135.0, pred_1rm=500.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=9.0, max_weight=135.0, pred_1rm=500.0)
+        )
         assert self._post().json()["target_reps"] == 12
 
     # AI OVERRIDE ─────────────────────────────────────────────────────────────
 
     def test_ai_override_status_when_pred_1rm_too_low(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=8.0, max_weight=135.0, pred_1rm=100.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=8.0, max_weight=135.0, pred_1rm=100.0)
+        )
         assert "AI OVERRIDE" in self._post().json()["status"]
 
     def test_ai_override_reduces_target_weight_below_last_weight(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=8.0, max_weight=200.0, pred_1rm=100.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=8.0, max_weight=200.0, pred_1rm=100.0)
+        )
         assert self._post().json()["target_weight"] < 200.0
 
     # NEW EXERCISE ────────────────────────────────────────────────────────────
 
     def test_new_exercise_status_when_max_weight_is_zero(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=0.0, max_weight=0.0, pred_1rm=150.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=0.0, max_weight=0.0, pred_1rm=150.0)
+        )
         assert self._post().json()["status"] == "NEW EXERCISE: Baseline"
 
     def test_new_exercise_target_weight_derived_from_pred_1rm(self):
-        _inject_model(UID, _make_custom_assets(avg_reps=0.0, max_weight=0.0, pred_1rm=150.0))
+        _inject_model(
+            UID, _make_custom_assets(avg_reps=0.0, max_weight=0.0, pred_1rm=150.0)
+        )
         assert self._post().json()["target_weight"] > 0.0
 
     # Insight strings ─────────────────────────────────────────────────────────
@@ -428,7 +487,9 @@ class TestRecommendLogic:
         assert "fatigue" in insight or "grip" in insight
 
     def test_plateau_insight_when_plateau_detected(self):
-        _inject_model(UID, _make_custom_assets(pred_1rm=300.0, summary_rows=_plateau_rows()))
+        _inject_model(
+            UID, _make_custom_assets(pred_1rm=300.0, summary_rows=_plateau_rows())
+        )
         insight = self._post().json()["notes_insight"]
         assert "1RM gain" in insight or "4 sessions" in insight
 
