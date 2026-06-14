@@ -5,6 +5,8 @@ import 'package:provider/provider.dart';
 import 'package:repiq/views/legal_view.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 
+/// Settings screen with local data stats, FitNotes CSV import, legal links,
+/// and a danger-zone clear action.
 class SettingsView extends StatelessWidget {
   const SettingsView({super.key});
 
@@ -160,6 +162,7 @@ class SettingsView extends StatelessWidget {
   }
 }
 
+/// Uppercase section label used between card groups.
 class _SectionHeader extends StatelessWidget {
   final String title;
   const _SectionHeader(this.title);
@@ -178,6 +181,7 @@ class _SectionHeader extends StatelessWidget {
   }
 }
 
+/// Tappable card row with an icon, title, subtitle, and optional loading spinner.
 class _ActionTile extends StatelessWidget {
   final IconData icon;
   final String title;

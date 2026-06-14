@@ -171,6 +171,7 @@ class _ProgressViewState extends State<ProgressView> {
   }
 }
 
+/// Accumulates per-session metrics as history sets are iterated.
 class _SessionAgg {
   final DateTime date;
   double maxOneRM = 0;
@@ -179,12 +180,14 @@ class _SessionAgg {
   _SessionAgg(this.date);
 }
 
+/// A (date, metric-value) pair mapped to one spot on the line chart.
 class _Point {
   final DateTime date;
   final double value;
   const _Point(this.date, this.value);
 }
 
+/// fl_chart line chart for the selected exercise metric over the chosen date range.
 class _Chart extends StatelessWidget {
   final List<_Point> data;
   final String metric;

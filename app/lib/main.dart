@@ -15,6 +15,8 @@ void main() async {
   runApp(const WorkoutApp());
 }
 
+/// Root [MaterialApp] — sets up the dark theme and provides [LogViewModel]
+/// and [RestTimer] to the entire widget tree.
 class WorkoutApp extends StatelessWidget {
   const WorkoutApp({super.key});
 
@@ -45,6 +47,8 @@ class WorkoutApp extends StatelessWidget {
   }
 }
 
+/// Checks whether onboarding is complete, then routes to [OnboardingView]
+/// or [_AppShell].
 class _RootGate extends StatefulWidget {
   const _RootGate();
   @override
@@ -75,6 +79,8 @@ class _RootGateState extends State<_RootGate> {
   }
 }
 
+/// 4-tab scaffold: Log, History, Progress, Settings.
+/// Keeps all tab views alive in an [IndexedStack].
 class _AppShell extends StatefulWidget {
   const _AppShell();
 
@@ -138,6 +144,7 @@ class _AppShellState extends State<_AppShell> {
   }
 }
 
+/// AppBar button that shows the remaining countdown and opens [_TimerSheet].
 class _TimerAction extends StatelessWidget {
   const _TimerAction();
 
@@ -185,6 +192,8 @@ class _TimerAction extends StatelessWidget {
   }
 }
 
+/// Bottom sheet with the full rest timer UI — duration steppers, Start/Stop
+/// buttons, and Vibrate/Sound/Auto-Start toggles.
 class _TimerSheet extends StatelessWidget {
   const _TimerSheet();
 
@@ -328,6 +337,7 @@ class _TimerSheet extends StatelessWidget {
   }
 }
 
+/// Square tap target used as the − / + duration buttons in [_TimerSheet].
 class _SheetButton extends StatelessWidget {
   final IconData icon;
   final VoidCallback onPressed;
@@ -350,6 +360,7 @@ class _SheetButton extends StatelessWidget {
   }
 }
 
+/// Labeled checkbox row used for the Vibrate, Sound, and Auto Start toggles.
 class _SettingCheck extends StatelessWidget {
   final String label;
   final bool value;

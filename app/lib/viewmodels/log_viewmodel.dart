@@ -29,14 +29,21 @@ Recommendation _computeRec(_RecParams p) {
   );
 }
 
+/// Categorizes an exercise so the UI shows the right input fields and the
+/// recommendation engine knows which algorithm to apply.
 enum ExerciseType { strength, cardio, passive }
 
+/// Maps a category string to [ExerciseType]. Defaults to [ExerciseType.strength]
+/// for any unrecognised category.
 ExerciseType exerciseTypeOf(String category) {
   if (category == 'Cardio') return ExerciseType.cardio;
   if (category == 'Passive') return ExerciseType.passive;
   return ExerciseType.strength;
 }
 
+/// One exercise entry in today's live session.
+/// Holds the recommendation (computed async), current training mode, and all
+/// sets logged so far today.
 class SessionExercise {
   final String exercise;
   final String category;
@@ -58,6 +65,12 @@ class SessionExercise {
   });
 }
 
+/// Central state for the log tab.
+///
+/// Owns today's [session] list, the full workout [history], and the exercise
+/// dictionary used to populate the add-exercise dialog. All persistence goes
+/// through [LocalStorageService]; recommendations are computed via
+/// [LocalRecommendationEngine] in a [compute] isolate.
 class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   final _storage = LocalStorageService();
 

@@ -3,16 +3,21 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 const _kOnboardingDone = 'onboarding_done_v1';
 
+/// Returns true if the user has already completed onboarding.
 Future<bool> isOnboardingDone() async {
   final prefs = await SharedPreferences.getInstance();
   return prefs.getBool(_kOnboardingDone) ?? false;
 }
 
+/// Persists the onboarding-complete flag so [isOnboardingDone] returns true
+/// on every subsequent launch.
 Future<void> markOnboardingDone() async {
   final prefs = await SharedPreferences.getInstance();
   await prefs.setBool(_kOnboardingDone, true);
 }
 
+/// Multi-page introduction shown on first launch. Calls [onComplete] when the
+/// user finishes or skips.
 class OnboardingView extends StatefulWidget {
   final VoidCallback onComplete;
   const OnboardingView({super.key, required this.onComplete});
@@ -135,6 +140,7 @@ class _OnboardingViewState extends State<OnboardingView> {
   }
 }
 
+/// Single slide in the onboarding page view: icon, title, and body text.
 class _OnboardingPage extends StatelessWidget {
   final IconData icon;
   final Color iconColor;
@@ -180,6 +186,8 @@ class _OnboardingPage extends StatelessWidget {
   }
 }
 
+/// Animated page-position dots shown at the bottom of [OnboardingView].
+/// The active dot expands horizontally to indicate the current page.
 class _DotsIndicator extends StatelessWidget {
   final int count;
   final int current;

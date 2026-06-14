@@ -48,6 +48,7 @@ class HistoryView extends StatelessWidget {
   }
 }
 
+/// Collapsible card showing all exercises and sets logged on a single day.
 class _DayCard extends StatelessWidget {
   final String date;
   final List<WorkoutSet> sets;
@@ -78,6 +79,7 @@ class _DayCard extends StatelessWidget {
   }
 }
 
+/// Exercise name with its logged set rows, shown inside a [_DayCard].
 class _ExerciseHistory extends StatelessWidget {
   final String exercise;
   final List<WorkoutSet> sets;
