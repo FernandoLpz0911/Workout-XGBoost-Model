@@ -52,6 +52,38 @@ The project includes a `Dockerfile` configured for containerized environments:
 * **GET `/exercises`**: Returns a mapped dictionary of all categories and their corresponding exercises found in the processed data.
 * **POST `/recommend`**: Accepts a category and exercise name to return a JSON object containing target reps, target weight, and the AI's safety status.
 
+## Testing
+
+The `tests/` directory contains a comprehensive pytest suite covering the ML pipeline and all API endpoints.
+
+### Running the tests
+
+```bash
+source workout_ai_env/bin/activate
+pytest tests/ -v
+```
+
+### Test coverage
+
+**`tests/test_pipeline.py`** — Pure computation, no external dependencies.
+
+| Class | What it covers |
+|---|---|
+| `TestCalculateHybrid1RM` | All three 1RM formulas (Brzycki 1–6 reps, Epley 7–11, Mayhew 12+), formula boundaries, edge cases (0 and negative reps) |
+| `TestTagComment` | All comment patterns (form issues, fatigue, drop sets, warm-ups), case insensitivity, `None`/`NaN`/`pd.NA` inputs, combined flags |
+| `TestRunPipeline` | Happy path, missing column errors, too-few-rows error, drop/warmup exclusion, weight-based warmup filter, non-numeric coercion, multi-exercise one-hot encoding, `Days_Since_Last` lag logic, `Volume_Load` calculation |
+
+**`tests/test_api.py`** — FastAPI endpoints with Firebase/GCS mocked (see `conftest.py`).
+
+| Class | What it covers |
+|---|---|
+| `TestTrainEndpoint` | Non-CSV rejection, oversized file (413), 409 when training already in progress, happy path |
+| `TestExercisesEndpoint` | 404 when no model, grouped exercise catalogue when model exists |
+| `TestRecommendEndpoint` | 404 cases, response shape and field types, `mode` parameter handling |
+| `TestModelCache` | FIFO eviction at capacity, no-op below cap |
+| `TestDeleteUserDataEndpoint` | Returns 200, evicts in-process cache |
+| `TestRecommendLogic` | Every `/recommend` decision branch: FORM FOCUS, DELOAD (plateau), Hypertrophy/Strength PROGRESSION, STABILIZATION, VOLUME, AI OVERRIDE, NEW EXERCISE, plus all five insight strings (form, fatigue, plateau, declining/rising momentum) |
+
 ## Neural Network Concept Notes
 *Included in the repository (`Notes.txt`) are foundational concepts regarding deep learning:*
 * **Activation Functions**: Uses ReLU to act as an "activation switch," converting negative values to zero to break linearity.
