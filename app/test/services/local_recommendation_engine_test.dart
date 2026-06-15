@@ -574,4 +574,131 @@ void main() {
       expect(rec.predicted1RM, closeTo(170.97, 0.5));
     });
   });
+
+  group('recommend — plateau detection', () {
+    List<WorkoutSet> fourStableSessions({String lastComment = ''}) {
+      final base = DateTime(2026, 1, 1);
+      return [
+        ws(base, 'Bench Press', 'Chest', 135.0, 8),
+        ws(base.add(const Duration(days: 7)), 'Bench Press', 'Chest', 135.0, 8),
+        ws(
+          base.add(const Duration(days: 14)),
+          'Bench Press',
+          'Chest',
+          135.0,
+          8,
+        ),
+        ws(
+          base.add(const Duration(days: 21)),
+          'Bench Press',
+          'Chest',
+          135.0,
+          8,
+          comment: lastComment,
+        ),
+      ];
+    }
+
+    test('four sessions with no 1RM gain triggers DELOAD status', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: fourStableSessions(),
+      );
+      expect(rec.status, contains('DELOAD'));
+    });
+
+    test('deload sets target reps to 15', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: fourStableSessions(),
+      );
+      expect(rec.targetReps, 15);
+    });
+
+    test('deload reduces target weight to 60 % of last max rounded to 2.5', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: fourStableSessions(),
+      );
+      // ((135 * 0.6) / 2.5).round() * 2.5 = 32.4.round() * 2.5 = 32 * 2.5 = 80
+      expect(rec.targetWeight, closeTo(80.0, 0.01));
+    });
+
+    test('plateau insight message is included in notesInsight', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: fourStableSessions(),
+      );
+      expect(rec.notesInsight.toLowerCase(), contains('4 sessions'));
+    });
+
+    test('five sessions with small gain still plateaus', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Bench Press', 'Chest', 135.0, 8),
+        ws(base.add(const Duration(days: 7)), 'Bench Press', 'Chest', 135.0, 8),
+        ws(
+          base.add(const Duration(days: 14)),
+          'Bench Press',
+          'Chest',
+          135.5,
+          8,
+        ),
+        ws(
+          base.add(const Duration(days: 21)),
+          'Bench Press',
+          'Chest',
+          135.0,
+          8,
+        ),
+        ws(
+          base.add(const Duration(days: 28)),
+          'Bench Press',
+          'Chest',
+          135.0,
+          8,
+        ),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: history,
+      );
+      expect(rec.status, contains('DELOAD'));
+    });
+
+    test('form issue takes priority over plateau', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: fourStableSessions(lastComment: 'did it wrong'),
+      );
+      expect(rec.status, contains('FORM FOCUS'));
+    });
+
+    test('three sessions does not trigger plateau even with stable 1RM', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Bench Press', 'Chest', 135.0, 8),
+        ws(base.add(const Duration(days: 7)), 'Bench Press', 'Chest', 135.0, 8),
+        ws(
+          base.add(const Duration(days: 14)),
+          'Bench Press',
+          'Chest',
+          135.0,
+          8,
+        ),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: history,
+      );
+      expect(rec.status, isNot(contains('DELOAD')));
+    });
+  });
 }
