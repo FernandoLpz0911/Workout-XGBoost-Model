@@ -498,7 +498,6 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     await _storage.clear();
     NotificationService.cancelWorkoutReminder();
     final prefs = _prefs ??= await SharedPreferences.getInstance();
-    await prefs.remove('last_firestore_sync_ms');
     await prefs.remove(_sessionOrderKey);
     await prefs.remove(_sessionOrderDateKey);
     await _loadHistory();
