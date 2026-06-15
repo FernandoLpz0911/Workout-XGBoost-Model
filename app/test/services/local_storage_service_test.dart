@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
@@ -321,5 +323,94 @@ void main() {
         expect(loaded.containsKey('Bench Press'), isFalse);
       },
     );
+  });
+
+  group('deleteSet', () {
+    test('removes the matching set from the database', () async {
+      final set = strengthSet();
+      await storage.appendSets([set]);
+      expect(await storage.count(), 1);
+      await storage.deleteSet(set);
+      expect(await storage.count(), 0);
+    });
+
+    test('deletes only the targeted set, leaving others intact', () async {
+      final a = strengthSet(date: DateTime(2026, 1, 1));
+      final b = strengthSet(date: DateTime(2026, 1, 2), weight: 140.0);
+      await storage.appendSets([a, b]);
+      await storage.deleteSet(a);
+      final remaining = await storage.loadAll();
+      expect(remaining.length, 1);
+      expect(remaining.first.weight, 140.0);
+    });
+
+    test('no-op when the set is not in the database', () async {
+      await storage.deleteSet(strengthSet());
+      expect(await storage.count(), 0);
+    });
+  });
+
+  group('updateSet', () {
+    test('replaces old set values with updated values', () async {
+      final original = strengthSet();
+      await storage.appendSets([original]);
+      final updated = strengthSet(weight: 145.0, reps: 6);
+      await storage.updateSet(original, updated);
+      final all = await storage.loadAll();
+      expect(all.length, 1);
+      expect(all.first.weight, 145.0);
+      expect(all.first.reps, 6);
+    });
+
+    test('count stays the same after update', () async {
+      final original = strengthSet();
+      await storage.appendSets([original]);
+      await storage.updateSet(original, strengthSet(weight: 150.0));
+      expect(await storage.count(), 1);
+    });
+  });
+
+  group('migration from SharedPreferences', () {
+    test(
+      'migrates workout_sets_v1 JSON into SQLite on first loadAll',
+      () async {
+        final json = jsonEncode([
+          {
+            'date': '2026-01-10T10:00:00.000',
+            'exercise': 'Squat',
+            'category': 'Legs',
+            'weight': 200.0,
+            'reps': 5,
+            'comment': '',
+          },
+        ]);
+        SharedPreferences.setMockInitialValues({'workout_sets_v1': json});
+        final migrated = LocalStorageService(dbPath: inMemoryDatabasePath);
+        addTearDown(migrated.close);
+        final sets = await migrated.loadAll();
+        expect(sets.length, 1);
+        expect(sets.first.exercise, 'Squat');
+        expect(sets.first.weight, 200.0);
+      },
+    );
+
+    test('migration does not re-import on second loadAll', () async {
+      final json = jsonEncode([
+        {
+          'date': '2026-01-10T10:00:00.000',
+          'exercise': 'Squat',
+          'category': 'Legs',
+          'weight': 200.0,
+          'reps': 5,
+          'comment': '',
+        },
+      ]);
+      SharedPreferences.setMockInitialValues({'workout_sets_v1': json});
+      final migrated = LocalStorageService(dbPath: inMemoryDatabasePath);
+      addTearDown(migrated.close);
+      await migrated.loadAll();
+      await migrated.loadAll();
+      expect(await migrated.count(), 1);
+    });
   });
 }

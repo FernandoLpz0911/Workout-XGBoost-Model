@@ -47,7 +47,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-minor: ["10", "12"]   # test on minimum supported + latest
+        python-minor: ["10", "12"]
 
     steps:
       - uses: actions/checkout@v4
@@ -82,13 +82,13 @@ jobs:
         run: flutter pub get
 
       - name: Check Dart formatting
-        run: dart format --output none --set-exit-if-changed lib/
+        run: dart format --output none --set-exit-if-changed lib/ test/
 
       - name: Analyze
         run: flutter analyze --fatal-infos
 
   flutter-test:
-    name: Flutter — Tests
+    name: Flutter — Tests & coverage
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -105,10 +105,28 @@ jobs:
       - name: Install packages
         run: flutter pub get
 
-      - name: Run tests
+      - name: Run tests with coverage
         run: flutter test --coverage
 
-      - name: Upload coverage
+      - name: Install lcov
+        run: sudo apt-get install -y lcov
+
+      - name: Enforce 95 % line coverage
+        run: |
+          SUMMARY=$(lcov --summary coverage/lcov.info 2>&1)
+          echo "$SUMMARY"
+          LINES=$(echo "$SUMMARY" | grep "lines" | grep -oP '\d+\.\d+' | head -1)
+          echo "Line coverage: ${LINES}%"
+          python3 -c "
+          import sys
+          pct = float('$LINES')
+          if pct < 95.0:
+              print(f'Coverage {pct}% is below the 95% threshold')
+              sys.exit(1)
+          print(f'Coverage {pct}% passes the 95% threshold')
+          "
+
+      - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
           name: flutter-coverage
