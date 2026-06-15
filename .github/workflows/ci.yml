@@ -7,7 +7,6 @@ on:
     branches: [main]
 
 jobs:
-  # ── Python: formatting ───────────────────────────────────────────────────────
   python-format:
     name: Python — Format check
     runs-on: ubuntu-latest
@@ -25,7 +24,6 @@ jobs:
       - name: Check formatting
         run: ruff format --check .
 
-  # ── Python: linting ──────────────────────────────────────────────────────────
   python-lint:
     name: Python — Lint
     runs-on: ubuntu-latest
@@ -43,7 +41,6 @@ jobs:
       - name: Run linter
         run: ruff check .
 
-  # ── Python: tests + coverage ─────────────────────────────────────────────────
   python-tests:
     name: Python — Tests (3.${{ matrix.python-minor }})
     runs-on: ubuntu-latest
@@ -61,12 +58,11 @@ jobs:
           cache: pip
 
       - name: Install dependencies
-        run: pip install -r requirements.txt pytest pytest-cov
+        run: pip install -r requirements.txt pytest pytest-cov httpx httpx2
 
       - name: Run tests with coverage
         run: pytest tests/ -v
 
-  # ── Flutter: analysis + formatting ───────────────────────────────────────────
   flutter-analyze:
     name: Flutter — Analyze & format check
     runs-on: ubuntu-latest
@@ -91,7 +87,6 @@ jobs:
       - name: Analyze
         run: flutter analyze --fatal-infos
 
-  # ── Flutter: tests ────────────────────────────────────────────────────────────
   flutter-test:
     name: Flutter — Tests
     runs-on: ubuntu-latest
