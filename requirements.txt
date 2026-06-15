@@ -7,4 +7,3 @@ xgboost==2.1.4
 joblib
 scikit-learn
 python-multipart
-google-cloud-storage>=2.0.0
