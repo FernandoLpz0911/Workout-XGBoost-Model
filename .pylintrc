@@ -1,0 +1,9 @@
+[MASTER]
+init-hook="import sys; sys.path.insert(0, '.')"
+
+[MESSAGES CONTROL]
+disable =
+    C0115,
+    C0116,
+    C0415,
+    W0212

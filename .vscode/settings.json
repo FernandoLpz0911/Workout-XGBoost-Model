@@ -1,0 +1,11 @@
+{
+    "python.defaultInterpreterPath": "./workout_ai_env/bin/python",
+    "java.import.gradle.enabled": false,
+    "java.autobuild.enabled": false,
+    "java.project.referencedLibraries": [],
+    "java.import.exclusions": [
+        "**/android/**",
+        "**/build/**",
+        "**/.gradle/**"
+    ]
+}

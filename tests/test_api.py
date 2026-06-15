@@ -4,20 +4,31 @@ No cloud dependencies — api.py is fully local. Tests patch disk I/O where
 needed so no real files are written during the test run.
 """
 
-import io
 import os
 import shutil
 import tempfile
-import time
 from unittest.mock import MagicMock, patch
 
 import joblib
 import pandas as pd
 import pytest
+import starlette.datastructures
 from fastapi.testclient import TestClient
 
 import api
-from api import _model_cache, _training_in_progress, app, get_uid
+from api import (
+    _CACHE_MAX,
+    _claim_training_slot,
+    _evict_model_cache,
+    _load_user_model,
+    _model_cache,
+    _release_training_slot,
+    _run_train,
+    _save_user_model,
+    _training_in_progress,
+    app,
+    get_uid,
+)
 
 # Override auth so every request provides UID without a real header.
 app.dependency_overrides[get_uid] = lambda: "uid_test"
@@ -130,8 +141,6 @@ class TestTrainEndpoint:
         assert UID not in _training_in_progress
 
     def test_file_read_error_releases_slot_and_returns_400(self):
-        import starlette.datastructures
-
         original = starlette.datastructures.UploadFile.read
 
         async def _fail(self, size=-1):
@@ -230,8 +239,6 @@ class TestRecommendEndpoint:
 
 class TestModelCache:
     def test_evict_removes_oldest_entry(self):
-        from api import _CACHE_MAX, _evict_model_cache
-
         for i in range(_CACHE_MAX):
             _model_cache[f"uid_{i}"] = (MagicMock(), [], MagicMock())
 
@@ -241,8 +248,6 @@ class TestModelCache:
         assert "uid_0" not in _model_cache
 
     def test_evict_no_op_when_under_limit(self):
-        from api import _evict_model_cache
-
         _model_cache["only_one"] = (MagicMock(), [], MagicMock())
         _evict_model_cache()
         assert "only_one" in _model_cache
@@ -250,34 +255,24 @@ class TestModelCache:
 
 class TestTrainingSlot:
     def test_claim_returns_true_when_free(self):
-        from api import _claim_training_slot
-
         assert _claim_training_slot("u1") is True
         assert "u1" in _training_in_progress
 
     def test_claim_returns_false_when_taken(self):
-        from api import _claim_training_slot
-
         _training_in_progress.add("u2")
         assert _claim_training_slot("u2") is False
 
     def test_release_removes_uid(self):
-        from api import _release_training_slot
-
         _training_in_progress.add("u3")
         _release_training_slot("u3")
         assert "u3" not in _training_in_progress
 
     def test_release_no_op_when_not_present(self):
-        from api import _release_training_slot
-
         _release_training_slot("ghost")  # must not raise
 
 
 class TestSaveUserModel:
     def test_saves_to_disk_and_warms_cache(self):
-        from api import _save_user_model
-
         tmp = tempfile.mkdtemp()
         try:
             with patch.object(api, "_MODEL_DIR", tmp):
@@ -298,13 +293,9 @@ class TestLoadUserModel:
     def test_returns_cached_value_on_hit(self):
         assets = _make_model_assets()
         _inject_model("uid_c", assets)
-        from api import _load_user_model
-
         assert _load_user_model("uid_c") is assets
 
     def test_loads_from_disk_on_cache_miss(self):
-        from api import _load_user_model
-
         tmp = tempfile.mkdtemp()
         try:
             uid = "uid_disk"
@@ -330,8 +321,6 @@ class TestLoadUserModel:
             shutil.rmtree(tmp, ignore_errors=True)
 
     def test_returns_none_when_no_model_on_disk(self):
-        from api import _load_user_model
-
         with patch.object(api, "_MODEL_DIR", "/nonexistent/path"):
             assert _load_user_model("uid_missing") is None
 
@@ -341,8 +330,6 @@ class TestRunTrainDirect:
         return pd.DataFrame({"Exercise": ["X"], "Category": ["Y"]})
 
     def test_success_saves_model_and_releases_slot(self):
-        from api import _run_train
-
         _training_in_progress.add("uid_t")
         with patch("api.run_pipeline", return_value=({"m": 1}, ["col"], self._summary())), \
              patch("api._save_user_model"):
@@ -351,8 +338,6 @@ class TestRunTrainDirect:
         assert "uid_t" not in _training_in_progress
 
     def test_failure_releases_slot(self):
-        from api import _run_train
-
         _training_in_progress.add("uid_tf")
         with patch("api.run_pipeline", side_effect=ValueError("bad csv")):
             _run_train("uid_tf", b"garbage")
