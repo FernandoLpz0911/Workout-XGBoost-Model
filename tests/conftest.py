@@ -9,7 +9,8 @@ import sys
 from unittest.mock import MagicMock
 
 _firebase_mock = MagicMock()
-_firebase_mock.get_app.return_value = MagicMock()  # prevent ValueError branch
+# Raise ValueError so api.py calls initialize_app() on import (covers lines 45-46).
+_firebase_mock.get_app.side_effect = ValueError
 
 _firestore_mock = MagicMock()
 _firestore_mock.SERVER_TIMESTAMP = "SERVER_TIMESTAMP"
