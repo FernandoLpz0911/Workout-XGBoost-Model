@@ -549,7 +549,7 @@ class TestRecommendLogic:
         body = self._post().json()
         assert "required_1rm" in body
         assert isinstance(body["required_1rm"], float)
-   
+
 
 class TestDeleteFirestoreCollection:
     """Covers lines 112-115: batch-delete loop body in _delete_firestore_collection."""
@@ -597,7 +597,9 @@ class TestLoadUserModelFromGCS:
 
     def test_downloads_and_caches_on_cache_miss(self):
         import io
+
         import joblib
+
         from api import _load_user_model
 
         model = {"weights": [3.0]}
@@ -640,9 +642,11 @@ class TestRunTrainDirect:
     def test_success_writes_complete_status(self):
         from api import _run_train
 
-        with patch("api.run_pipeline", return_value=({"m": 1}, ["col"], self._summary())), \
-             patch("api._save_user_model"), \
-             patch("api._training_status_ref") as mock_ref_fn:
+        with (
+            patch("api.run_pipeline", return_value=({"m": 1}, ["col"], self._summary())),
+            patch("api._save_user_model"),
+            patch("api._training_status_ref") as mock_ref_fn,
+        ):
             mock_ref = MagicMock()
             mock_ref_fn.return_value = mock_ref
             _run_train("uid_t", b"a,b\n1,2")
@@ -652,9 +656,11 @@ class TestRunTrainDirect:
     def test_success_status_write_error_is_swallowed(self):
         from api import _run_train
 
-        with patch("api.run_pipeline", return_value=({"m": 1}, ["col"], self._summary())), \
-             patch("api._save_user_model"), \
-             patch("api._training_status_ref") as mock_ref_fn:
+        with (
+            patch("api.run_pipeline", return_value=({"m": 1}, ["col"], self._summary())),
+            patch("api._save_user_model"),
+            patch("api._training_status_ref") as mock_ref_fn,
+        ):
             mock_ref = MagicMock()
             mock_ref.set.side_effect = Exception("Firestore down")
             mock_ref_fn.return_value = mock_ref
@@ -663,8 +669,10 @@ class TestRunTrainDirect:
     def test_failure_writes_failed_status(self):
         from api import _run_train
 
-        with patch("api.run_pipeline", side_effect=ValueError("bad csv")), \
-             patch("api._training_status_ref") as mock_ref_fn:
+        with (
+            patch("api.run_pipeline", side_effect=ValueError("bad csv")),
+            patch("api._training_status_ref") as mock_ref_fn,
+        ):
             mock_ref = MagicMock()
             mock_ref_fn.return_value = mock_ref
             _run_train("uid_tf", b"garbage")
@@ -676,8 +684,10 @@ class TestRunTrainDirect:
     def test_failure_status_write_error_is_swallowed(self):
         from api import _run_train
 
-        with patch("api.run_pipeline", side_effect=ValueError("bad")), \
-             patch("api._training_status_ref") as mock_ref_fn:
+        with (
+            patch("api.run_pipeline", side_effect=ValueError("bad")),
+            patch("api._training_status_ref") as mock_ref_fn,
+        ):
             mock_ref = MagicMock()
             mock_ref.set.side_effect = Exception("Firestore down")
             mock_ref_fn.return_value = mock_ref
@@ -693,10 +703,9 @@ class TestClaimTrainingSlot:
 
         gcp_mock = sys.modules["google.cloud.firestore"]
         original = gcp_mock.transactional
-        gcp_mock.transactional = lambda fn: (lambda txn: fn(txn))
+        gcp_mock.transactional = lambda fn: lambda txn: fn(txn)
         try:
-            with patch("api._training_status_ref") as mock_ref_fn, \
-                 patch.object(api, "_run_train"):
+            with patch("api._training_status_ref") as mock_ref_fn, patch.object(api, "_run_train"):
                 mock_ref = MagicMock()
                 mock_snapshot = MagicMock()
                 mock_snapshot.exists = snapshot_exists
@@ -715,36 +724,48 @@ class TestClaimTrainingSlot:
         assert self._post_train(snapshot_exists=False).status_code == 200
 
     def test_existing_non_training_status_claims_slot(self):
-        assert self._post_train(
-            snapshot_exists=True, to_dict_val={"status": "complete"}
-        ).status_code == 200
+        assert (
+            self._post_train(snapshot_exists=True, to_dict_val={"status": "complete"}).status_code
+            == 200
+        )
 
     def test_training_startedAt_none_is_rejected(self):
-        assert self._post_train(
-            snapshot_exists=True,
-            to_dict_val={"status": "training", "startedAt": None},
-        ).status_code == 409
+        assert (
+            self._post_train(
+                snapshot_exists=True,
+                to_dict_val={"status": "training", "startedAt": None},
+            ).status_code
+            == 409
+        )
 
     def test_fresh_training_lock_is_rejected(self):
         from datetime import datetime, timezone
 
-        assert self._post_train(
-            snapshot_exists=True,
-            to_dict_val={"status": "training", "startedAt": datetime.now(timezone.utc)},
-        ).status_code == 409
+        assert (
+            self._post_train(
+                snapshot_exists=True,
+                to_dict_val={"status": "training", "startedAt": datetime.now(timezone.utc)},
+            ).status_code
+            == 409
+        )
 
     def test_expired_training_lock_is_reclaimed(self):
         from datetime import datetime, timedelta, timezone
 
         from api import _TRAIN_LOCK_TTL
 
-        assert self._post_train(
-            snapshot_exists=True,
-            to_dict_val={
-                "status": "training",
-                "startedAt": datetime.now(timezone.utc) - _TRAIN_LOCK_TTL - timedelta(seconds=1),
-            },
-        ).status_code == 200
+        assert (
+            self._post_train(
+                snapshot_exists=True,
+                to_dict_val={
+                    "status": "training",
+                    "startedAt": datetime.now(timezone.utc)
+                    - _TRAIN_LOCK_TTL
+                    - timedelta(seconds=1),
+                },
+            ).status_code
+            == 200
+        )
 
 
 class TestFileReadError:
