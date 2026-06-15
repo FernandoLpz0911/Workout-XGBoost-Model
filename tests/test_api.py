@@ -27,9 +27,6 @@ client = TestClient(app)
 UID = "uid_test"
 
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-
 def _make_model_assets():
     """Return a minimal (model, feature_cols, summary) tuple."""
     model = MagicMock()
@@ -78,9 +75,6 @@ def clear_state():
     _training_in_progress.clear()
 
 
-# ── Auth ──────────────────────────────────────────────────────────────────────
-
-
 class TestAuthDependency:
     def test_missing_header_raises_401(self):
         with pytest.raises(Exception) as exc_info:
@@ -90,9 +84,6 @@ class TestAuthDependency:
 
     def test_header_present_returns_uid(self):
         assert get_uid("alice") == "alice"
-
-
-# ── /train ────────────────────────────────────────────────────────────────────
 
 
 class TestTrainEndpoint:
@@ -158,9 +149,6 @@ class TestTrainEndpoint:
             starlette.datastructures.UploadFile.read = original
 
 
-# ── /exercises ────────────────────────────────────────────────────────────────
-
-
 class TestExercisesEndpoint:
     def test_returns_404_when_no_model(self):
         response = client.get("/exercises")
@@ -178,9 +166,6 @@ class TestExercisesEndpoint:
         model, feature_cols, _ = _make_model_assets()
         _inject_model(UID, (model, feature_cols, pd.DataFrame({"WrongCol": [1]})))
         assert client.get("/exercises").status_code == 500
-
-
-# ── /recommend ────────────────────────────────────────────────────────────────
 
 
 class TestRecommendEndpoint:
@@ -243,9 +228,6 @@ class TestRecommendEndpoint:
         assert any(v in body["status"] for v in valid)
 
 
-# ── Model cache ───────────────────────────────────────────────────────────────
-
-
 class TestModelCache:
     def test_evict_removes_oldest_entry(self):
         from api import _CACHE_MAX, _evict_model_cache
@@ -264,9 +246,6 @@ class TestModelCache:
         _model_cache["only_one"] = (MagicMock(), [], MagicMock())
         _evict_model_cache()
         assert "only_one" in _model_cache
-
-
-# ── Training slot ─────────────────────────────────────────────────────────────
 
 
 class TestTrainingSlot:
@@ -293,9 +272,6 @@ class TestTrainingSlot:
         from api import _release_training_slot
 
         _release_training_slot("ghost")  # must not raise
-
-
-# ── Disk save / load ──────────────────────────────────────────────────────────
 
 
 class TestSaveUserModel:
@@ -360,9 +336,6 @@ class TestLoadUserModel:
             assert _load_user_model("uid_missing") is None
 
 
-# ── _run_train ────────────────────────────────────────────────────────────────
-
-
 class TestRunTrainDirect:
     def _summary(self):
         return pd.DataFrame({"Exercise": ["X"], "Category": ["Y"]})
@@ -385,9 +358,6 @@ class TestRunTrainDirect:
             _run_train("uid_tf", b"garbage")
 
         assert "uid_tf" not in _training_in_progress
-
-
-# ── /delete-user-data ────────────────────────────────────────────────────────
 
 
 class TestDeleteUserDataEndpoint:
@@ -416,8 +386,6 @@ class TestDeleteUserDataEndpoint:
         with patch.object(api, "_MODEL_DIR", "/nonexistent/path"):
             assert client.delete("/delete-user-data").status_code == 200
 
-
-# ── /recommend decision-tree tests ───────────────────────────────────────────
 
 _DEFAULT_FEATURE_COLS = [
     "Days_Since_Last",
@@ -485,8 +453,6 @@ class TestRecommendLogic:
             json={"exercise": "Bench Press", "category": "Chest", "mode": mode},
         )
 
-    # FORM FOCUS
-
     def test_form_focus_status(self):
         _inject_model(UID, _make_custom_assets(had_form=1))
         assert "FORM FOCUS" in self._post().json()["status"]
@@ -503,8 +469,6 @@ class TestRecommendLogic:
         _inject_model(UID, _make_custom_assets(had_form=1))
         assert "technique" in self._post().json()["notes_insight"].lower()
 
-    # DELOAD
-
     def test_deload_status_when_plateau(self):
         _inject_model(UID, _make_custom_assets(summary_rows=_plateau_rows()))
         assert "DELOAD" in self._post().json()["status"]
@@ -517,8 +481,6 @@ class TestRecommendLogic:
         _inject_model(UID, _make_custom_assets(summary_rows=_plateau_rows()))
         body = self._post().json()
         assert body["target_weight"] == pytest.approx(round(135.0 * 0.6 / 2.5) * 2.5)
-
-    # PROGRESSION
 
     def test_hypertrophy_progression_status(self):
         _inject_model(UID, _make_custom_assets(avg_reps=12.0))
@@ -536,8 +498,6 @@ class TestRecommendLogic:
         _inject_model(UID, _make_custom_assets(avg_reps=6.0, max_weight=135.0))
         assert self._post("strength").json()["target_weight"] == pytest.approx(140.0)
 
-    # STABILIZATION
-
     def test_hypertrophy_stabilization_status(self):
         _inject_model(UID, _make_custom_assets(avg_reps=5.0))
         assert "HYPERTROPHY STABILIZATION" in self._post().json()["status"]
@@ -554,8 +514,6 @@ class TestRecommendLogic:
         _inject_model(UID, _make_custom_assets(avg_reps=2.0, max_weight=135.0))
         assert "STRENGTH STABILIZATION" in self._post("strength").json()["status"]
 
-    # VOLUME
-
     def test_hypertrophy_volume_status(self):
         _inject_model(UID, _make_custom_assets(avg_reps=8.0))
         assert "HYPERTROPHY VOLUME" in self._post().json()["status"]
@@ -564,8 +522,6 @@ class TestRecommendLogic:
         _inject_model(UID, _make_custom_assets(avg_reps=8.0))
         assert self._post().json()["target_reps"] == 12
 
-    # AI OVERRIDE
-
     def test_ai_override_status_when_pred_1rm_too_low(self):
         _inject_model(UID, _make_custom_assets(avg_reps=8.0, max_weight=135.0, pred_1rm=50.0))
         assert "AI OVERRIDE" in self._post().json()["status"]
@@ -573,8 +529,6 @@ class TestRecommendLogic:
     def test_ai_override_reduces_target_weight_below_last_weight(self):
         _inject_model(UID, _make_custom_assets(avg_reps=8.0, max_weight=135.0, pred_1rm=50.0))
         assert self._post().json()["target_weight"] < 135.0
-
-    # NEW EXERCISE
 
     def test_new_exercise_status_when_max_weight_is_zero(self):
         _inject_model(UID, _make_custom_assets(max_weight=0.0, pred_1rm=200.0))
@@ -585,8 +539,6 @@ class TestRecommendLogic:
         body = self._post().json()
         assert body["target_weight"] > 0
         assert body["target_reps"] == 8
-
-    # Insights
 
     def test_fatigue_insight_when_had_fatigue(self):
         _inject_model(UID, _make_custom_assets(had_fatigue=1))
