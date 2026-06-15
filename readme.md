@@ -62,10 +62,6 @@ source workout_ai_env/bin/activate      # Windows: workout_ai_env\Scripts\activa
 # 3. Install dependencies
 pip install -r requirements.txt
 
-# 4. Set required environment variables
-export GCS_BUCKET=your-gcs-bucket-name
-export GOOGLE_APPLICATION_CREDENTIALS=/path/to/service-account.json
-
 # 5. Start the API server
 uvicorn api:app --reload --port 8080
 ```
