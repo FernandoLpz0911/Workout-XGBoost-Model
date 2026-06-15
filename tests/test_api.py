@@ -250,6 +250,48 @@ class TestModelCache:
         assert "only_one" in _model_cache
 
 
+class TestAuthDependency:
+    def test_missing_header_raises_401(self):
+        with pytest.raises(Exception) as exc_info:
+            get_uid(None)
+        assert exc_info.value.status_code == 401
+        assert "Missing" in exc_info.value.detail
+
+    def test_no_bearer_prefix_raises_401(self):
+        with pytest.raises(Exception) as exc_info:
+            get_uid("Token abc123")
+        assert exc_info.value.status_code == 401
+
+    def test_invalid_token_raises_401(self):
+        with patch("api.firebase_auth.verify_id_token", side_effect=Exception("token expired")):
+            with pytest.raises(Exception) as exc_info:
+                get_uid("Bearer bad_token")
+        assert exc_info.value.status_code == 401
+        assert "Invalid token" in exc_info.value.detail
+
+
+class TestModelCacheExpiry:
+    def test_stale_cache_entry_evicted_on_access(self):
+        from api import _MODEL_CACHE_TTL
+
+        _model_cache[UID] = _make_model_assets()
+        _model_loaded_at[UID] = time.monotonic() - _MODEL_CACHE_TTL - 1
+
+        # GCS mock returns non-bytes → joblib.load fails → _load_user_model returns None → 404
+        response = client.get("/exercises")
+        assert response.status_code == 404
+        assert UID not in _model_cache
+
+
+class TestExercisesEndpointErrors:
+    def test_returns_500_when_summary_missing_columns(self):
+        model, feature_cols, _ = _make_model_assets()
+        bad_summary = pd.DataFrame({"WrongColumn": [1]})
+        _inject_model(UID, (model, feature_cols, bad_summary))
+        response = client.get("/exercises")
+        assert response.status_code == 500
+
+
 class TestDeleteUserDataEndpoint:
     def test_returns_200(self):
         response = client.delete("/delete-user-data")
@@ -507,3 +549,273 @@ class TestRecommendLogic:
         body = self._post().json()
         assert "required_1rm" in body
         assert isinstance(body["required_1rm"], float)
+   
+
+class TestDeleteFirestoreCollection:
+    """Covers lines 112-115: batch-delete loop body in _delete_firestore_collection."""
+
+    def test_deletes_docs_in_batches(self):
+        from api import _delete_firestore_collection
+
+        mock_doc = MagicMock()
+        mock_batch = MagicMock()
+        col_ref = MagicMock()
+        # First call returns one doc; second returns empty → breaks loop.
+        col_ref.limit.return_value.stream.side_effect = [[mock_doc], []]
+
+        with patch("api.admin_firestore") as mock_fs:
+            mock_db = MagicMock()
+            mock_db.batch.return_value = mock_batch
+            mock_fs.client.return_value = mock_db
+            _delete_firestore_collection(col_ref)
+
+        mock_batch.delete.assert_called_once_with(mock_doc.reference)
+        mock_batch.commit.assert_called_once()
+
+
+class TestSaveUserModel:
+    """Covers lines 125-144: GCS uploads + cache warm in _save_user_model."""
+
+    def test_uploads_artifacts_and_warms_cache(self):
+        from api import _save_user_model
+
+        model = {"weights": [1.0, 2.0]}  # simple picklable stand-in
+        feature_cols = ["Days_Since_Last", "Previous_1RM"]
+        summary = pd.DataFrame({"Exercise": ["Bench Press"], "Category": ["Chest"]})
+
+        with patch.object(api, "_gcs_client") as mock_gcs:
+            mock_bucket = MagicMock()
+            mock_gcs.bucket.return_value = mock_bucket
+            _save_user_model("uid_save", model, feature_cols, summary)
+
+        assert "uid_save" in _model_cache
+        assert _model_cache["uid_save"][1] == feature_cols
+
+
+class TestLoadUserModelFromGCS:
+    """Covers lines 174-185: GCS download path in _load_user_model."""
+
+    def test_downloads_and_caches_on_cache_miss(self):
+        import io
+        import joblib
+        from api import _load_user_model
+
+        model = {"weights": [3.0]}
+        feature_cols = ["Days_Since_Last"]
+        summary = pd.DataFrame({"Date": [pd.Timestamp("2026-01-01")], "Exercise": ["Squat"]})
+
+        model_buf = io.BytesIO()
+        joblib.dump(model, model_buf)
+        fc_buf = io.BytesIO()
+        joblib.dump(feature_cols, fc_buf)
+        csv_bytes = summary.to_csv(index=False).encode()
+
+        blob_model = MagicMock()
+        blob_model.download_as_bytes.return_value = model_buf.getvalue()
+        blob_fc = MagicMock()
+        blob_fc.download_as_bytes.return_value = fc_buf.getvalue()
+        blob_csv = MagicMock()
+        blob_csv.download_as_bytes.return_value = csv_bytes
+
+        mock_bucket = MagicMock()
+        mock_bucket.blob.side_effect = [blob_model, blob_fc, blob_csv]
+
+        with patch.object(api, "_gcs_client") as mock_gcs:
+            mock_gcs.bucket.return_value = mock_bucket
+            result = _load_user_model("uid_gcs")
+
+        assert result is not None
+        loaded_model, loaded_fc, _ = result
+        assert loaded_model == model
+        assert loaded_fc == feature_cols
+        assert "uid_gcs" in _model_cache
+
+
+class TestRunTrainDirect:
+    """Covers lines 212-237: _run_train success and failure paths."""
+
+    def _summary(self):
+        return pd.DataFrame({"Exercise": ["X"], "Category": ["Y"]})
+
+    def test_success_writes_complete_status(self):
+        from api import _run_train
+
+        with patch("api.run_pipeline", return_value=({"m": 1}, ["col"], self._summary())), \
+             patch("api._save_user_model"), \
+             patch("api._training_status_ref") as mock_ref_fn:
+            mock_ref = MagicMock()
+            mock_ref_fn.return_value = mock_ref
+            _run_train("uid_t", b"a,b\n1,2")
+
+        assert mock_ref.set.call_args[0][0]["status"] == "complete"
+
+    def test_success_status_write_error_is_swallowed(self):
+        from api import _run_train
+
+        with patch("api.run_pipeline", return_value=({"m": 1}, ["col"], self._summary())), \
+             patch("api._save_user_model"), \
+             patch("api._training_status_ref") as mock_ref_fn:
+            mock_ref = MagicMock()
+            mock_ref.set.side_effect = Exception("Firestore down")
+            mock_ref_fn.return_value = mock_ref
+            _run_train("uid_t2", b"a,b\n1,2")  # must not raise
+
+    def test_failure_writes_failed_status(self):
+        from api import _run_train
+
+        with patch("api.run_pipeline", side_effect=ValueError("bad csv")), \
+             patch("api._training_status_ref") as mock_ref_fn:
+            mock_ref = MagicMock()
+            mock_ref_fn.return_value = mock_ref
+            _run_train("uid_tf", b"garbage")
+
+        call = mock_ref.set.call_args[0][0]
+        assert call["status"] == "failed"
+        assert "bad csv" in call["error"]
+
+    def test_failure_status_write_error_is_swallowed(self):
+        from api import _run_train
+
+        with patch("api.run_pipeline", side_effect=ValueError("bad")), \
+             patch("api._training_status_ref") as mock_ref_fn:
+            mock_ref = MagicMock()
+            mock_ref.set.side_effect = Exception("Firestore down")
+            mock_ref_fn.return_value = mock_ref
+            _run_train("uid_tf2", b"garbage")  # must not raise
+
+
+class TestClaimTrainingSlot:
+    """Covers lines 266-284: all branches inside _claim_training_slot."""
+
+    def _post_train(self, snapshot_exists, to_dict_val=None):
+        """Run POST /train with pass-through transactional and a configured snapshot."""
+        import sys
+
+        gcp_mock = sys.modules["google.cloud.firestore"]
+        original = gcp_mock.transactional
+        gcp_mock.transactional = lambda fn: (lambda txn: fn(txn))
+        try:
+            with patch("api._training_status_ref") as mock_ref_fn, \
+                 patch.object(api, "_run_train"):
+                mock_ref = MagicMock()
+                mock_snapshot = MagicMock()
+                mock_snapshot.exists = snapshot_exists
+                if to_dict_val is not None:
+                    mock_snapshot.to_dict.return_value = to_dict_val
+                mock_ref.get.return_value = mock_snapshot
+                mock_ref_fn.return_value = mock_ref
+                return client.post(
+                    "/train",
+                    files={"file": ("d.csv", b"a,b\n1,2", "text/csv")},
+                )
+        finally:
+            gcp_mock.transactional = original
+
+    def test_no_existing_doc_claims_slot(self):
+        assert self._post_train(snapshot_exists=False).status_code == 200
+
+    def test_existing_non_training_status_claims_slot(self):
+        assert self._post_train(
+            snapshot_exists=True, to_dict_val={"status": "complete"}
+        ).status_code == 200
+
+    def test_training_startedAt_none_is_rejected(self):
+        assert self._post_train(
+            snapshot_exists=True,
+            to_dict_val={"status": "training", "startedAt": None},
+        ).status_code == 409
+
+    def test_fresh_training_lock_is_rejected(self):
+        from datetime import datetime, timezone
+
+        assert self._post_train(
+            snapshot_exists=True,
+            to_dict_val={"status": "training", "startedAt": datetime.now(timezone.utc)},
+        ).status_code == 409
+
+    def test_expired_training_lock_is_reclaimed(self):
+        from datetime import datetime, timedelta, timezone
+
+        from api import _TRAIN_LOCK_TTL
+
+        assert self._post_train(
+            snapshot_exists=True,
+            to_dict_val={
+                "status": "training",
+                "startedAt": datetime.now(timezone.utc) - _TRAIN_LOCK_TTL - timedelta(seconds=1),
+            },
+        ).status_code == 200
+
+
+class TestFileReadError:
+    """Covers lines 291-302: except block when await file.read() raises."""
+
+    def _patch_failing_read(self):
+        import starlette.datastructures
+
+        original = starlette.datastructures.UploadFile.read
+
+        async def _failing_read(self, size=-1):
+            raise IOError("disk error")
+
+        starlette.datastructures.UploadFile.read = _failing_read
+        return starlette.datastructures.UploadFile, original
+
+    def test_returns_400_when_file_read_raises(self):
+        cls, original = self._patch_failing_read()
+        try:
+            response = client.post(
+                "/train",
+                files={"file": ("d.csv", b"a,b\n1,2", "text/csv")},
+            )
+            assert response.status_code == 400
+            assert "Failed to read" in response.json()["detail"]
+        finally:
+            cls.read = original
+
+    def test_returns_400_even_when_status_write_fails(self):
+        """Covers lines 300-301: inner except when status_ref.set() also raises."""
+        cls, original = self._patch_failing_read()
+        try:
+            with patch("api._training_status_ref") as mock_ref_fn:
+                mock_ref = MagicMock()
+                mock_ref.set.side_effect = Exception("Firestore down")
+                mock_ref_fn.return_value = mock_ref
+                response = client.post(
+                    "/train",
+                    files={"file": ("d.csv", b"a,b\n1,2", "text/csv")},
+                )
+            assert response.status_code == 400
+        finally:
+            cls.read = original
+
+
+class TestDeleteUserDataFull:
+    """Covers lines 548-550 (GCS blob loop + error), 558-559 (Firestore error), 563-564 (auth error)."""
+
+    def test_deletes_gcs_blobs_when_present(self):
+        mock_blob = MagicMock()
+        with patch.object(api, "_gcs_client") as mock_gcs:
+            mock_bucket = MagicMock()
+            mock_bucket.list_blobs.return_value = [mock_blob]
+            mock_gcs.bucket.return_value = mock_bucket
+            response = client.delete("/delete-user-data")
+        assert response.status_code == 200
+        mock_blob.delete.assert_called_once()
+
+    def test_gcs_error_is_swallowed(self):
+        with patch.object(api, "_gcs_client") as mock_gcs:
+            mock_gcs.bucket.side_effect = Exception("GCS down")
+            response = client.delete("/delete-user-data")
+        assert response.status_code == 200
+
+    def test_firestore_error_is_swallowed(self):
+        with patch("api.admin_firestore") as mock_fs:
+            mock_fs.client.side_effect = Exception("Firestore down")
+            response = client.delete("/delete-user-data")
+        assert response.status_code == 200
+
+    def test_auth_delete_error_is_swallowed(self):
+        with patch("api.firebase_auth.delete_user", side_effect=Exception("auth error")):
+            response = client.delete("/delete-user-data")
+        assert response.status_code == 200
