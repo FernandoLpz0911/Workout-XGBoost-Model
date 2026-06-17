@@ -39,33 +39,48 @@ class LocalRecommendationEngine {
     return den == 0 ? 0.0 : num / den;
   }
 
-  // RegExp patterns mirror the ones used in pipeline.py so signal detection
-  // stays consistent between the offline engine and cloud model.
+  static bool _isFormIssue(String c) {
+    final s = c.toLowerCase();
+    return s.contains('did it wrong') ||
+        s.contains('wrong') ||
+        s.contains('unsure') ||
+        s.contains('too heavy') ||
+        s.contains('failed') ||
+        s.contains("couldn't") ||
+        s.contains("can't complete") ||
+        s.contains('sloppy') ||
+        s.contains('lost balance') ||
+        (s.contains('form is') &&
+            (s.contains('off') || s.contains('weird') || s.contains('bad'))) ||
+        s.contains('feeling tricep') ||
+        s.contains('feeling arm') ||
+        s.contains('injury');
+  }
 
-  // ignore: deprecated_member_use
-  static final _formIssueRe = RegExp(
-    r"did it wrong|wrong|unsure|too heavy|failed|couldn't|can't complete|"
-    r'sloppy|lost balance|form is\s*(off|weird|bad)|'
-    r'feeling tricep|feeling arm|injury',
-    caseSensitive: false,
-  );
-  // ignore: deprecated_member_use
-  static final _fatigueRe = RegExp(
-    r'forearm|fatigued|tired|gave out|grip\s*(loose|gave|gone|tiring)|'
-    r'arms gave|tiring out|limiting',
-    caseSensitive: false,
-  );
-  static final _dropSetRe =
-      // ignore: deprecated_member_use
-      RegExp(r'drop\s*set|no rest', caseSensitive: false);
-  static final _warmupRe =
-      // ignore: deprecated_member_use
-      RegExp(r'warm[\s-]?up', caseSensitive: false);
+  static bool _isFatigue(String c) {
+    final s = c.toLowerCase();
+    return s.contains('forearm') ||
+        s.contains('fatigued') ||
+        s.contains('tired') ||
+        s.contains('gave out') ||
+        s.contains('grip loose') ||
+        s.contains('grip gave') ||
+        s.contains('grip gone') ||
+        s.contains('grip tiring') ||
+        s.contains('arms gave') ||
+        s.contains('tiring out') ||
+        s.contains('limiting');
+  }
 
-  static bool _isFormIssue(String c) => c.contains(_formIssueRe);
-  static bool _isFatigue(String c) => c.contains(_fatigueRe);
-  static bool _isDropSet(String c) => c.contains(_dropSetRe);
-  static bool _isWarmup(String c) => c.contains(_warmupRe);
+  static bool _isDropSet(String c) {
+    final s = c.toLowerCase();
+    return s.contains('dropset') || s.contains('drop set') || s.contains('no rest');
+  }
+
+  static bool _isWarmup(String c) {
+    final s = c.toLowerCase();
+    return s.contains('warmup') || s.contains('warm up') || s.contains('warm-up');
+  }
 
   /// True when the last 4 sessions show no 1RM gain >= 2.5 lbs — indicates a
   /// true plateau rather than normal fluctuation.
