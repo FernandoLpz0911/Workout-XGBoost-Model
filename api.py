@@ -15,7 +15,6 @@ import io
 import os
 import shutil
 import threading
-import time
 from typing import Optional
 
 import joblib
@@ -91,9 +90,7 @@ def _release_training_slot(uid: str) -> None:
         _training_in_progress.discard(uid)
 
 
-def _save_user_model(
-    uid: str, model, feature_cols: list, session_summary: pd.DataFrame
-) -> None:
+def _save_user_model(uid: str, model, feature_cols: list, session_summary: pd.DataFrame) -> None:
     """Persist model artifacts to disk and warm the in-process cache.
 
     Three files per user: the XGBoost model, the feature column list
@@ -128,7 +125,14 @@ def _load_user_model(uid: str) -> tuple | None:
         _evict_model_cache()
         _model_cache[uid] = (model, feature_cols, session_summary)
         return _model_cache[uid]
-    except Exception:  # noqa: BLE001
+    except (
+        OSError,
+        ValueError,
+        EOFError,
+        KeyError,
+        pd.errors.ParserError,
+        pd.errors.EmptyDataError,
+    ):
         return None
 
 
@@ -152,7 +156,15 @@ def _run_train(uid: str, csv_bytes: bytes) -> None:
         model, feature_cols, session_summary = run_pipeline(io.BytesIO(csv_bytes))
         _save_user_model(uid, model, feature_cols, session_summary)
         print(f"Training complete for {uid}")
-    except Exception as exc:  # noqa: BLE001
+    except (
+        ValueError,
+        OSError,
+        KeyError,
+        TypeError,
+        RuntimeError,
+        pd.errors.ParserError,
+        pd.errors.EmptyDataError,
+    ) as exc:
         print(f"Training error for {uid}: {exc}")
     finally:
         _release_training_slot(uid)
@@ -177,9 +189,9 @@ async def train_model(
 
     try:
         csv_bytes = await file.read()
-    except Exception:
+    except OSError as exc:
         _release_training_slot(uid)
-        raise HTTPException(400, "Failed to read uploaded file.")
+        raise HTTPException(400, "Failed to read uploaded file.") from exc
 
     if len(csv_bytes) > _MAX_CSV_BYTES:
         _release_training_slot(uid)
@@ -200,13 +212,8 @@ def get_exercises(uid: str = Depends(get_uid)):
         raise HTTPException(404, "No trained model. Upload CSV via /train.")
     _, _, session_summary = assets
     try:
-        return (
-            session_summary.groupby("Category")["Exercise"]
-            .unique()
-            .apply(list)
-            .to_dict()
-        )
-    except Exception as exc:
+        return session_summary.groupby("Category")["Exercise"].unique().apply(list).to_dict()
+    except (KeyError, AttributeError, TypeError, ValueError) as exc:
         raise HTTPException(500, str(exc)) from exc
 
 
@@ -351,9 +358,7 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
     else:
         required_1rm = float(target_weight * (1 + 0.0333 * target_reps))
         if not is_plateaued and predicted_1rm < required_1rm * safety_threshold:
-            target_weight = (
-                round(_epley_working_weight(predicted_1rm, target_reps) / 2.5) * 2.5
-            )
+            target_weight = round(_epley_working_weight(predicted_1rm, target_reps) / 2.5) * 2.5
             status = "AI OVERRIDE: Fatigue — weight adjusted for safety"
         else:
             status = progression_status
@@ -364,9 +369,7 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
     if is_plateaued:
         insights.append("No 1RM gain in 4 sessions. Deload to 60% to rebuild capacity.")
     if had_fatigue:
-        insights.append(
-            "Fatigue logged last session — consider a grip aid or extra rest."
-        )
+        insights.append("Fatigue logged last session — consider a grip aid or extra rest.")
     if one_rm_momentum < -2:
         insights.append("1RM declining — deload or extra recovery may help.")
     elif one_rm_momentum > 5:
