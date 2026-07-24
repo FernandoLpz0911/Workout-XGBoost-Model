@@ -506,6 +506,11 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  void reportImportFailure(String message) {
+    lastActionMessage = message;
+    notifyListeners();
+  }
+
   void dismissLastActionMessage() {
     lastActionMessage = null;
     notifyListeners();

@@ -1082,16 +1082,53 @@ void _editValue(
   required bool isDecimal,
   required void Function(double) onConfirm,
 }) {
-  final ctrl = TextEditingController(text: initial);
   showDialog<void>(
     context: context,
-    builder: (_) => AlertDialog(
-      title: Text(label),
+    builder: (_) => _EditValueDialog(
+      label: label,
+      initial: initial,
+      isDecimal: isDecimal,
+      onConfirm: onConfirm,
+    ),
+  );
+}
+
+/// Numeric entry dialog used by [_editValue]. Owns its [TextEditingController]
+/// so it can be disposed when the dialog closes.
+class _EditValueDialog extends StatefulWidget {
+  final String label;
+  final String initial;
+  final bool isDecimal;
+  final void Function(double) onConfirm;
+  const _EditValueDialog({
+    required this.label,
+    required this.initial,
+    required this.isDecimal,
+    required this.onConfirm,
+  });
+
+  @override
+  State<_EditValueDialog> createState() => _EditValueDialogState();
+}
+
+class _EditValueDialogState extends State<_EditValueDialog> {
+  late final _ctrl = TextEditingController(text: widget.initial);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.label),
       content: TextField(
-        controller: ctrl,
+        controller: _ctrl,
         autofocus: true,
-        keyboardType: TextInputType.numberWithOptions(decimal: isDecimal),
-        decoration: InputDecoration(hintText: label),
+        keyboardType: TextInputType.numberWithOptions(decimal: widget.isDecimal),
+        decoration: InputDecoration(hintText: widget.label),
       ),
       actions: [
         TextButton(
@@ -1100,17 +1137,17 @@ void _editValue(
         ),
         ElevatedButton(
           onPressed: () {
-            final v = double.tryParse(ctrl.text);
+            final v = double.tryParse(_ctrl.text);
             if (v != null) {
-              onConfirm(v);
+              widget.onConfirm(v);
               Navigator.pop(context);
             }
           },
           child: const Text('OK'),
         ),
       ],
-    ),
-  );
+    );
+  }
 }
 
 String _weekday(int d) =>
