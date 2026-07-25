@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/services/notification_service.dart';
 import 'package:repiq/services/rest_timer.dart';
+import 'package:repiq/services/theme_controller.dart';
+import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/history_view.dart';
 import 'package:repiq/views/log_view.dart';
@@ -19,8 +21,9 @@ void main() async {
   runApp(const WorkoutApp());
 }
 
-/// Root [MaterialApp] — sets up the dark theme and provides [LogViewModel]
-/// and [RestTimer] to the entire widget tree.
+/// Root [MaterialApp] — provides [LogViewModel], [RestTimer], and
+/// [ThemeController] to the entire widget tree, and applies whichever
+/// [AppTheme] the user has picked in Settings.
 class WorkoutApp extends StatelessWidget {
   const WorkoutApp({super.key});
 
@@ -30,22 +33,15 @@ class WorkoutApp extends StatelessWidget {
       providers: [
         ChangeNotifierProvider(create: (_) => LogViewModel()),
         ChangeNotifierProvider(create: (_) => RestTimer()),
+        ChangeNotifierProvider(create: (_) => ThemeController()),
       ],
-      child: MaterialApp(
-        title: 'RepIQ',
-        debugShowCheckedModeBanner: false,
-        theme: ThemeData(
-          brightness: Brightness.dark,
-          colorScheme: ColorScheme.dark(
-            primary: Colors.redAccent,
-            secondary: Colors.blueAccent,
-            surface: const Color(0xFF262730),
-          ),
-          scaffoldBackgroundColor: const Color(0xFF0E1117),
-          cardColor: const Color(0xFF262730),
-          useMaterial3: true,
+      child: Consumer<ThemeController>(
+        builder: (context, themeController, _) => MaterialApp(
+          title: 'RepIQ',
+          debugShowCheckedModeBanner: false,
+          theme: AppThemes.of(themeController.themeId).data,
+          home: const _RootGate(),
         ),
-        home: const _RootGate(),
       ),
     );
   }
@@ -73,10 +69,7 @@ class _RootGateState extends State<_RootGate> {
   @override
   Widget build(BuildContext context) {
     if (_done == null) {
-      return const Scaffold(
-        backgroundColor: Color(0xFF0E1117),
-        body: Center(child: CircularProgressIndicator()),
-      );
+      return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
     if (!_done!) {
       return OnboardingView(onComplete: () => setState(() => _done = true));
@@ -134,8 +127,6 @@ class _AppShellState extends State<_AppShell> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_index]),
-        backgroundColor: const Color(0xFF0E1117),
-        surfaceTintColor: Colors.transparent,
         actions: const [_TimerAction(), SizedBox(width: 8)],
       ),
       body: IndexedStack(index: _index, children: _pages),
@@ -143,8 +134,6 @@ class _AppShellState extends State<_AppShell> {
         selectedIndex: _index,
         onDestinationSelected: (i) => setState(() => _index = i),
         destinations: _destinations,
-        backgroundColor: const Color(0xFF262730),
-        indicatorColor: Colors.redAccent.withValues(alpha: 0.25),
       ),
     );
   }
@@ -156,11 +145,12 @@ class _TimerAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final errorColor = Theme.of(context).colorScheme.error;
     return Consumer<RestTimer>(
       builder: (context, timer, _) {
         final isDone = !timer.isRunning && timer.remaining == 0;
         final isLow = timer.remaining > 0 && timer.remaining <= 10;
-        final color = isLow ? Colors.redAccent : Colors.white;
+        final color = isLow ? errorColor : null;
 
         return TextButton.icon(
           onPressed: () => _showSheet(context, timer),
@@ -185,7 +175,9 @@ class _TimerAction extends StatelessWidget {
   void _showSheet(BuildContext context, RestTimer timer) {
     showModalBottomSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF262730),
+      backgroundColor: Theme.of(
+        context,
+      ).extension<AppPalette>()!.sheetBackground,
       isScrollControlled: true,
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
@@ -205,6 +197,7 @@ class _TimerSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final errorColor = Theme.of(context).colorScheme.error;
     return Consumer<RestTimer>(
       builder: (context, timer, _) {
         final mq = MediaQuery.of(context);
@@ -248,8 +241,8 @@ class _TimerSheet extends StatelessWidget {
                           fontSize: 48,
                           fontWeight: FontWeight.bold,
                           color: (timer.isRunning && timer.remaining <= 10)
-                              ? Colors.redAccent
-                              : Colors.white,
+                              ? errorColor
+                              : null,
                         ),
                       ),
                     ),
@@ -314,7 +307,9 @@ class _TimerSheet extends StatelessWidget {
                       child: ElevatedButton(
                         onPressed: timer.start,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.redAccent,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                         ),
@@ -353,7 +348,7 @@ class _SheetButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFF1C1C26),
+      color: Theme.of(context).extension<AppPalette>()!.raisedSurface,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),

@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/rest_timer.dart';
+import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 
 export 'package:repiq/viewmodels/log_viewmodel.dart' show TrainingMode;
@@ -88,6 +89,7 @@ class LogView extends StatelessWidget {
   }
 
   static void _confirmRemove(BuildContext context, LogViewModel vm, int index) {
+    final errorColor = Theme.of(context).colorScheme.error;
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
@@ -105,10 +107,7 @@ class LogView extends StatelessWidget {
               Navigator.pop(context);
               vm.removeExercise(index);
             },
-            child: const Text(
-              'Remove',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child: Text('Remove', style: TextStyle(color: errorColor)),
           ),
         ],
       ),
@@ -281,10 +280,7 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
         final type = exerciseTypeOf(ex.category);
 
         return Scaffold(
-          backgroundColor: const Color(0xFF0E1117),
           appBar: AppBar(
-            backgroundColor: const Color(0xFF0E1117),
-            surfaceTintColor: Colors.transparent,
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -335,7 +331,7 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
                 child: ElevatedButton(
                   onPressed: _canSave(type) ? () => _save(vm, ex, type) : null,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.redAccent,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(10),
@@ -993,8 +989,8 @@ class _StepperRow extends StatelessWidget {
       children: [
         Text(
           label,
-          style: const TextStyle(
-            color: Colors.blueAccent,
+          style: TextStyle(
+            color: Theme.of(context).colorScheme.secondary,
             fontSize: 12,
             fontWeight: FontWeight.w600,
             letterSpacing: 0.8,
@@ -1034,7 +1030,7 @@ class _StepBtn extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: const Color(0xFF1C1C26),
+      color: Theme.of(context).extension<AppPalette>()!.raisedSurface,
       borderRadius: BorderRadius.circular(8),
       child: InkWell(
         borderRadius: BorderRadius.circular(8),

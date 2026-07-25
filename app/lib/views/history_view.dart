@@ -93,6 +93,7 @@ class _ExerciseHistory extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final primary = Theme.of(context).colorScheme.primary;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
@@ -103,12 +104,12 @@ class _ExerciseHistory extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
                 decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.2),
+                  color: primary.withValues(alpha: 0.2),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
                   sets.first.category,
-                  style: const TextStyle(fontSize: 11, color: Colors.redAccent),
+                  style: TextStyle(fontSize: 11, color: primary),
                 ),
               ),
               const SizedBox(width: 8),
