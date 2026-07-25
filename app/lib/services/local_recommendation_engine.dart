@@ -110,8 +110,34 @@ class LocalRecommendationEngine {
   /// Returns a [Recommendation] for [exercise] given the user's full history.
   ///
   /// The [mode] parameter selects between hypertrophy and strength progressions.
+  /// The [algorithm] parameter selects between the standard linear-progression
+  /// engine and the plateau-breaker cycle used for exercises the user has
+  /// flagged as chronically slow-progressing.
   /// Drop sets and warm-up sets are excluded before any computation.
   static Recommendation recommend({
+    required String exercise,
+    required String category,
+    required List<WorkoutSet> allHistory,
+    TrainingMode mode = TrainingMode.hypertrophy,
+    ProgressionAlgorithm algorithm = ProgressionAlgorithm.standard,
+  }) {
+    if (algorithm == ProgressionAlgorithm.plateauBreaker) {
+      return _recommendPlateauBreaker(
+        exercise: exercise,
+        category: category,
+        allHistory: allHistory,
+        mode: mode,
+      );
+    }
+    return _recommendStandard(
+      exercise: exercise,
+      category: category,
+      allHistory: allHistory,
+      mode: mode,
+    );
+  }
+
+  static Recommendation _recommendStandard({
     required String exercise,
     required String category,
     required List<WorkoutSet> allHistory,
@@ -300,6 +326,20 @@ class LocalRecommendationEngine {
       predicted1RM: last1RM,
       required1RM: required1RM,
       notesInsight: insights.join(' '),
+    );
+  }
+
+  static Recommendation _recommendPlateauBreaker({
+    required String exercise,
+    required String category,
+    required List<WorkoutSet> allHistory,
+    TrainingMode mode = TrainingMode.hypertrophy,
+  }) {
+    return _recommendStandard(
+      exercise: exercise,
+      category: category,
+      allHistory: allHistory,
+      mode: mode,
     );
   }
 }

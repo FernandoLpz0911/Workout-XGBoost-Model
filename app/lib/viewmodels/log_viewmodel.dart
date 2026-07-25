@@ -9,14 +9,22 @@ import 'package:repiq/services/local_recommendation_engine.dart';
 import 'package:repiq/services/local_storage_service.dart';
 import 'package:repiq/services/notification_service.dart';
 
-export '../models/recommendation_models.dart' show TrainingMode;
+export '../models/recommendation_models.dart'
+    show TrainingMode, ProgressionAlgorithm;
 
 class _RecParams {
   final String exercise;
   final String category;
   final List<Map<String, dynamic>> setsJson;
   final String mode;
-  const _RecParams(this.exercise, this.category, this.setsJson, this.mode);
+  final String algorithm;
+  const _RecParams(
+    this.exercise,
+    this.category,
+    this.setsJson,
+    this.mode,
+    this.algorithm,
+  );
 }
 
 Recommendation _computeRec(_RecParams p) {
@@ -28,6 +36,9 @@ Recommendation _computeRec(_RecParams p) {
     mode: p.mode == 'strength'
         ? TrainingMode.strength
         : TrainingMode.hypertrophy,
+    algorithm: p.algorithm == 'plateauBreaker'
+        ? ProgressionAlgorithm.plateauBreaker
+        : ProgressionAlgorithm.standard,
   );
 }
 
@@ -52,6 +63,8 @@ class SessionExercise {
 
   TrainingMode trainingMode;
 
+  ProgressionAlgorithm progressionAlgorithm;
+
   Recommendation? recommendation;
 
   String? recError;
@@ -64,6 +77,7 @@ class SessionExercise {
     required this.exercise,
     required this.category,
     this.trainingMode = TrainingMode.hypertrophy,
+    this.progressionAlgorithm = ProgressionAlgorithm.standard,
   });
 }
 
@@ -92,6 +106,8 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   int localSetCount = 0;
 
   Map<String, TrainingMode> _trainingModes = {};
+
+  Map<String, ProgressionAlgorithm> _progressionAlgorithms = {};
 
   SharedPreferences? _prefs;
 
@@ -208,6 +224,9 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  ProgressionAlgorithm progressionAlgorithmFor(String exercise) =>
+      _progressionAlgorithms[exercise] ?? ProgressionAlgorithm.standard;
+
   List<String> get allCategories {
     final cats = <String>{...exerciseDict.keys, ..._alwaysCategories};
     return cats.toList()..sort();
@@ -237,6 +256,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _prefs = await SharedPreferences.getInstance();
     await _loadHistory();
     await _loadTrainingModes();
+    await _loadProgressionAlgorithms();
     _rebuildDict();
     _loadTodaySession();
     isDictLoading = false;
@@ -256,6 +276,24 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   void _saveTrainingModes() {
     _storage.saveTrainingModes(
       _trainingModes.map((k, v) => MapEntry(k, v.name)),
+    );
+  }
+
+  Future<void> _loadProgressionAlgorithms() async {
+    final raw = await _storage.loadProgressionAlgorithms();
+    _progressionAlgorithms = raw.map(
+      (k, v) => MapEntry(
+        k,
+        v == 'plateauBreaker'
+            ? ProgressionAlgorithm.plateauBreaker
+            : ProgressionAlgorithm.standard,
+      ),
+    );
+  }
+
+  void _saveProgressionAlgorithms() {
+    _storage.saveProgressionAlgorithms(
+      _progressionAlgorithms.map((k, v) => MapEntry(k, v.name)),
     );
   }
 
@@ -284,6 +322,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
           exercise: s.exercise,
           category: s.category,
           trainingMode: trainingModeFor(s.exercise),
+          progressionAlgorithm: progressionAlgorithmFor(s.exercise),
         );
         _applyRec(ex);
         session.add(ex);
@@ -307,6 +346,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
             exercise: exercise,
             category: category,
             trainingMode: trainingModeFor(exercise),
+            progressionAlgorithm: progressionAlgorithmFor(exercise),
           );
           _applyRec(ex);
           session.add(ex);
@@ -345,6 +385,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
             .map((s) => s.toJson())
             .toList(),
         ex.trainingMode.name,
+        ex.progressionAlgorithm.name,
       );
       compute(_computeRec, params)
           .then((rec) {
@@ -381,14 +422,23 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     return dur != null ? 'Last session: $dur' : '';
   }
 
-  void addExercise(String category, String exercise) {
+  void addExercise(
+    String category,
+    String exercise, {
+    ProgressionAlgorithm algorithm = ProgressionAlgorithm.standard,
+  }) {
     if (session.any((e) => e.exercise == exercise && e.category == category)) {
       return;
+    }
+    if (exerciseTypeOf(category) == ExerciseType.strength) {
+      _progressionAlgorithms[exercise] = algorithm;
+      _saveProgressionAlgorithms();
     }
     final ex = SessionExercise(
       exercise: exercise,
       category: category,
       trainingMode: trainingModeFor(exercise),
+      progressionAlgorithm: algorithm,
     );
     _applyRec(ex);
     session.add(ex);
