@@ -11,7 +11,11 @@ import 'package:repiq/views/settings_view.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await NotificationService.init();
+  try {
+    await NotificationService.init();
+  } catch (e) {
+    debugPrint('NotificationService.init failed: $e');
+  }
   runApp(const WorkoutApp());
 }
 
