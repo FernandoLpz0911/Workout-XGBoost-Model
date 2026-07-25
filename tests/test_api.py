@@ -331,8 +331,10 @@ class TestRunTrainDirect:
 
     def test_success_saves_model_and_releases_slot(self):
         _training_in_progress.add("uid_t")
-        with patch("api.run_pipeline", return_value=({"m": 1}, ["col"], self._summary())), \
-             patch("api._save_user_model"):
+        with (
+            patch("api.run_pipeline", return_value=({"m": 1}, ["col"], self._summary())),
+            patch("api._save_user_model"),
+        ):
             _run_train("uid_t", b"a,b\n1,2")
 
         assert "uid_t" not in _training_in_progress
