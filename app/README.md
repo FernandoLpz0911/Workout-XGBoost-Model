@@ -1,6 +1,6 @@
 # RepIQ — Mobile App
 
-The Flutter half of [RepIQ](../readme.md): a fully offline Android strength-training logger with an on-device AI recommendation engine.
+The Flutter half of [RepIQ](../readme.md): a fully offline Android strength-training logger with an on-device machine learning recommendation engine.
 
 ---
 

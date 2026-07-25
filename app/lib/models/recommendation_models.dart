@@ -23,7 +23,7 @@ enum ProgressionAlgorithm {
   plateauBreaker,
 }
 
-/// AI-generated recommendation for a single exercise session.
+/// Machine learning-generated recommendation for a single exercise session.
 class Recommendation {
   /// Suggested number of reps per set.
   final int targetReps;

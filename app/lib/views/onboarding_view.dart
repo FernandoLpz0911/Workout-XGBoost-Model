@@ -36,8 +36,8 @@ class _OnboardingViewState extends State<OnboardingView> {
       iconColor: Colors.redAccent,
       title: 'Welcome to RepIQ',
       body:
-          'Your AI-powered lifting coach. Log workouts, get smarter '
-          'recommendations every session, and break through plateaus.',
+          'Your machine learning-powered lifting coach. Log workouts, get '
+          'smarter recommendations every session, and break through plateaus.',
     ),
     _OnboardingPage(
       icon: Icons.add_circle_outline,
@@ -59,7 +59,7 @@ class _OnboardingViewState extends State<OnboardingView> {
     _OnboardingPage(
       icon: Icons.trending_up,
       iconColor: Colors.greenAccent,
-      title: 'AI That Learns You',
+      title: 'Machine Learning That Learns You',
       body:
           'Every session makes the recommendations smarter. '
           'RepIQ tracks 1RM trends, detects plateaus, and tells you '

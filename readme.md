@@ -1,4 +1,4 @@
-# RepIQ — AI-Powered Strength Training Coach
+# RepIQ — Machine Learning-Powered Strength Training Coach
 
 [![CI](https://github.com/FernandoLpz0911/workoutNeuralNetwork/actions/workflows/ci.yml/badge.svg)](https://github.com/FernandoLpz0911/workoutNeuralNetwork/actions/workflows/ci.yml)
 
@@ -12,7 +12,7 @@ Most training apps suggest generic progression rules. RepIQ learns your specific
 
 **Mobile app (RepIQ for Android)**
 - FitNotes-style logging: tap an exercise, enter weight and reps, save the set
-- AI recommendations computed on-device from your local SQLite history — no internet required
+- Machine learning recommendations computed on-device from your local SQLite history — no internet required
 - Progress charts for estimated 1RM, max weight, and volume across any date range
 - FitNotes CSV import/export to seed or back up your history
 
@@ -30,7 +30,7 @@ Most training apps suggest generic progression rules. RepIQ learns your specific
 |---|---|
 | **Hybrid 1RM estimation** | Automatically selects Brzycki (1–6 reps), Epley (7–11), or Mayhew (12+) for the best accuracy at any rep range |
 | **Comment-aware training** | NLP tagging of set notes flags form issues, fatigue, drop sets, and warm-ups, which feed into the model and the deload logic |
-| **Six-branch decision tree** | FORM FOCUS → DELOAD → PROGRESSION → STABILIZATION → VOLUME → AI OVERRIDE, in priority order |
+| **Six-branch decision tree** | FORM FOCUS → DELOAD → PROGRESSION → STABILIZATION → VOLUME → ML OVERRIDE, in priority order |
 | **Safety thresholds by muscle group** | Arms/Shoulders require a higher fraction of predicted capacity before a weight increase is suggested, reflecting injury risk |
 | **Plateau detection** | If 1RM hasn't improved by 2.5 lbs over four sessions, the app prescribes an automatic deload to 60% |
 | **Rolling momentum** | A 3-session polyfit slope distinguishes real strength trends from session-to-session noise |

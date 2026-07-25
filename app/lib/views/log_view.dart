@@ -178,7 +178,7 @@ class _EmptySessionView extends StatelessWidget {
 }
 
 /// Full-screen logging page for a single exercise.
-/// Shows the AI recommendation, training mode toggle, weight/reps steppers,
+/// Shows the machine learning recommendation, training mode toggle, weight/reps steppers,
 /// and the running list of sets logged so far today.
 class _ExerciseDetailPage extends StatefulWidget {
   final int exerciseIndex;
@@ -467,7 +467,7 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
   ];
 }
 
-/// Displays the AI recommendation for strength exercises, or a last-session
+/// Displays the machine learning recommendation for strength exercises, or a last-session
 /// summary for cardio/passive exercises.
 class _RecBanner extends StatelessWidget {
   final SessionExercise ex;

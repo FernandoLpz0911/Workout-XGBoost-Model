@@ -224,7 +224,7 @@ class TestRecommendEndpoint:
             "/recommend",
             json={"exercise": "Bench Press", "category": "Chest", "mode": "strength"},
         ).json()
-        valid = {"STRENGTH", "FORM", "DELOAD", "AI OVERRIDE"}
+        valid = {"STRENGTH", "FORM", "DELOAD", "ML OVERRIDE"}
         assert any(v in body["status"] for v in valid)
 
     def test_unknown_mode_falls_back_to_hypertrophy(self):
@@ -233,7 +233,7 @@ class TestRecommendEndpoint:
             "/recommend",
             json={"exercise": "Bench Press", "category": "Chest", "mode": "invalid"},
         ).json()
-        valid = {"HYPERTROPHY", "FORM", "DELOAD", "AI OVERRIDE"}
+        valid = {"HYPERTROPHY", "FORM", "DELOAD", "ML OVERRIDE"}
         assert any(v in body["status"] for v in valid)
 
 
@@ -509,7 +509,7 @@ class TestRecommendLogic:
 
     def test_ai_override_status_when_pred_1rm_too_low(self):
         _inject_model(UID, _make_custom_assets(avg_reps=8.0, max_weight=135.0, pred_1rm=50.0))
-        assert "AI OVERRIDE" in self._post().json()["status"]
+        assert "ML OVERRIDE" in self._post().json()["status"]
 
     def test_ai_override_reduces_target_weight_below_last_weight(self):
         _inject_model(UID, _make_custom_assets(avg_reps=8.0, max_weight=135.0, pred_1rm=50.0))
