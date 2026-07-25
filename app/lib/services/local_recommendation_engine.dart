@@ -283,7 +283,7 @@ class LocalRecommendationEngine {
       var adjusted = (_workingWeight(last1RM, targetReps) / 2.5).round() * 2.5;
       if (adjusted <= 0) adjusted = lastMaxW;
       targetWeight = adjusted.toDouble();
-      status = 'AI OVERRIDE: Declining trend — weight adjusted for safety';
+      status = 'ML OVERRIDE: Declining trend — weight adjusted for safety';
     } else if (repConsistency < 0.5 && !hadFormIssue) {
       targetWeight = lastMaxW;
       targetReps = defaultReps;

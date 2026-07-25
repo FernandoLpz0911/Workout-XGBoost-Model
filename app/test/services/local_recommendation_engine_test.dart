@@ -392,7 +392,7 @@ void main() {
       expect(rec.status, isNot(contains('Rep drop')));
     });
   });
-  group('recommend — AI override', () {
+  group('recommend — ML override', () {
     // Three sessions with a steep weight decline at 6 reps (strength mode).
     // Sessions: 100 → 80 → 60 lbs.
     // Momentum ≈ −23 (well below −2 threshold).
@@ -403,17 +403,17 @@ void main() {
       ws(DateTime(2026, 1, 15), 'Bench Press', 'Chest', 60, 6),
     ];
 
-    test('triggers AI OVERRIDE on a declining trend with low capacity', () {
+    test('triggers ML OVERRIDE on a declining trend with low capacity', () {
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Bench Press',
         category: 'Chest',
         allHistory: decliningHistory,
         mode: TrainingMode.strength,
       );
-      expect(rec.status, contains('AI OVERRIDE'));
+      expect(rec.status, contains('ML OVERRIDE'));
     });
 
-    test('AI override adds a declining-trend notesInsight', () {
+    test('ML override adds a declining-trend notesInsight', () {
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Bench Press',
         category: 'Chest',
@@ -548,7 +548,7 @@ void main() {
       expect(rec.targetWeight, 122.5);
     });
 
-    test('two sessions with steady reps produce no AI override', () {
+    test('two sessions with steady reps produce no ML override', () {
       final history = [
         ws(DateTime(2026, 1, 1), 'Squat', 'Legs', 100, 8),
         ws(DateTime(2026, 1, 8), 'Squat', 'Legs', 100, 8),
@@ -558,7 +558,7 @@ void main() {
         category: 'Legs',
         allHistory: history,
       );
-      expect(rec.status, isNot(contains('AI OVERRIDE')));
+      expect(rec.status, isNot(contains('ML OVERRIDE')));
     });
 
     test('predicted1RM reflects the last session max set', () {

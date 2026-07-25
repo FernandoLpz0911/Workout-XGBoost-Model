@@ -4,7 +4,7 @@ Endpoints
 ---------
 POST   /train             Retrain the user's XGBoost model from a CSV.
 GET    /exercises         List exercises from the user's training history.
-POST   /recommend         Return an AI weight/rep target for a given exercise.
+POST   /recommend         Return a machine learning weight/rep target for a given exercise.
 DELETE /delete-user-data  Wipe all locally stored model data for the user.
 
 Pass the user's local identifier in the ``X-User-ID`` header.
@@ -233,7 +233,7 @@ def _epley_working_weight(one_rm: float, target_reps: int) -> float:
 
 @app.post("/recommend")
 def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
-    """Return an AI-generated weight and rep target for the given exercise.
+    """Return a machine learning-generated weight and rep target for the given exercise.
 
     Decision logic (in priority order):
     1. FORM FOCUS    — technique issues logged last session; repeat weight.
@@ -241,7 +241,7 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
     3. PROGRESSION   — hit graduation reps last session; bump weight.
     4. STABILIZATION — reps too low to safely progress; build rep count first.
     5. VOLUME        — in the working rep range; push toward graduation target.
-    6. AI OVERRIDE   — XGBoost predicts capacity too low; scale weight down.
+    6. ML OVERRIDE   — XGBoost predicts capacity too low; scale weight down.
     7. NEW EXERCISE  — no prior data; baseline from predicted 1RM.
     """
     assets = _load_user_model(uid)
@@ -304,7 +304,7 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
         inference_row.at[0, category_feature_col] = 1.0
 
     inference_row = inference_row[feature_cols].astype(float)
-    # CAUTION: XGBoost can predict negative values on extrapolation. The AI
+    # CAUTION: XGBoost can predict negative values on extrapolation. The ML
     # OVERRIDE threshold catches most cases, but monitor in production.
     predicted_1rm = float(model.predict(inference_row)[0])
 
@@ -359,7 +359,7 @@ def get_recommendation(req: WorkoutRequest, uid: str = Depends(get_uid)):
         required_1rm = float(target_weight * (1 + 0.0333 * target_reps))
         if not is_plateaued and predicted_1rm < required_1rm * safety_threshold:
             target_weight = round(_epley_working_weight(predicted_1rm, target_reps) / 2.5) * 2.5
-            status = "AI OVERRIDE: Fatigue — weight adjusted for safety"
+            status = "ML OVERRIDE: Fatigue — weight adjusted for safety"
         else:
             status = progression_status
 

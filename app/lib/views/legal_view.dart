@@ -67,7 +67,7 @@ By using RepIQ you agree to these terms.
 
 2. DESCRIPTION OF SERVICE
 
-RepIQ is a free, open-source, fully offline workout logging and AI recommendation app. It provides exercise suggestions based on your logged history using on-device algorithms. No internet connection is required.
+RepIQ is a free, open-source, fully offline workout logging and machine learning recommendation app. It provides exercise suggestions based on your logged history using on-device algorithms. No internet connection is required.
 
 3. NOT MEDICAL ADVICE
 

@@ -1,5 +1,5 @@
 name: repiq
-description: "AI-powered strength and hypertrophy training recommendations"
+description: "Machine learning-powered strength and hypertrophy training recommendations"
 publish_to: 'none'
 version: 1.0.0+6
 
