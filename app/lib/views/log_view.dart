@@ -5,6 +5,7 @@ import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/rest_timer.dart';
 import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
+import 'package:repiq/views/widgets/note_indicator.dart';
 
 export 'package:repiq/viewmodels/log_viewmodel.dart' show TrainingMode;
 
@@ -556,17 +557,9 @@ class _SetRow extends StatelessWidget {
             set.displayText,
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
-          if (set.comment.isNotEmpty) ...[
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                '"${set.comment}"',
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          ] else
-            const Spacer(),
+          const SizedBox(width: 4),
+          NoteIndicator(comment: set.comment),
+          const Spacer(),
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.grey),
             onPressed: onEdit,
