@@ -90,7 +90,7 @@ class _AppShell extends StatefulWidget {
 class _AppShellState extends State<_AppShell> {
   int _index = 0;
 
-  static const _titles = ['Log Workout', 'History', 'Progress', 'Settings'];
+  static const _titles = ['Log Workout', 'Progress', 'History', 'Settings'];
 
   static const _destinations = [
     NavigationDestination(
@@ -99,14 +99,14 @@ class _AppShellState extends State<_AppShell> {
       label: 'Log',
     ),
     NavigationDestination(
-      icon: Icon(Icons.history_outlined),
-      selectedIcon: Icon(Icons.history),
-      label: 'History',
-    ),
-    NavigationDestination(
       icon: Icon(Icons.show_chart_outlined),
       selectedIcon: Icon(Icons.show_chart),
       label: 'Progress',
+    ),
+    NavigationDestination(
+      icon: Icon(Icons.history_outlined),
+      selectedIcon: Icon(Icons.history),
+      label: 'History',
     ),
     NavigationDestination(
       icon: Icon(Icons.settings_outlined),
@@ -117,8 +117,8 @@ class _AppShellState extends State<_AppShell> {
 
   static const _pages = [
     LogView(),
-    HistoryView(),
     ProgressView(),
+    HistoryView(),
     SettingsView(),
   ];
 

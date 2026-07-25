@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
+import 'package:repiq/views/exercise_detail_view.dart';
+import 'package:repiq/views/widgets/note_indicator.dart';
 
 /// Displays the full workout history grouped by date, then by exercise.
 class HistoryView extends StatelessWidget {
@@ -99,25 +101,41 @@ class _ExerciseHistory extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                decoration: BoxDecoration(
-                  color: primary.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Text(
-                  sets.first.category,
-                  style: TextStyle(fontSize: 11, color: primary),
+          InkWell(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (_) => ExerciseDetailView(
+                  exercise: exercise,
+                  category: sets.first.category,
                 ),
               ),
-              const SizedBox(width: 8),
-              Text(
-                exercise,
-                style: const TextStyle(fontWeight: FontWeight.w600),
-              ),
-            ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: primary.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    sets.first.category,
+                    style: TextStyle(fontSize: 11, color: primary),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  exercise,
+                  style: const TextStyle(fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+              ],
+            ),
           ),
           const SizedBox(height: 6),
           ...sets.asMap().entries.map((entry) {
@@ -136,20 +154,8 @@ class _ExerciseHistory extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(s.displayText, style: const TextStyle(fontSize: 13)),
-                  if (s.comment.isNotEmpty) ...[
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        '"${s.comment}"',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                          fontStyle: FontStyle.italic,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                  const SizedBox(width: 4),
+                  NoteIndicator(comment: s.comment),
                 ],
               ),
             );
