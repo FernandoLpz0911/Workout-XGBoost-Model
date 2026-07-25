@@ -86,6 +86,14 @@ class LocalRecommendationEngine {
         s.contains('warm-up');
   }
 
+  /// True for assistance-machine exercises (e.g. "Assisted Pull Up"), where
+  /// the tracked weight is assistance provided rather than load lifted —
+  /// less weight means less assistance, i.e. more progress. The inverse of
+  /// every other exercise, so these never go through the 1RM-based standard
+  /// or plateau-breaker paths.
+  static bool _isAssisted(String exercise) =>
+      exercise.toLowerCase().contains('assisted');
+
   /// True when the last 4 sessions show no 1RM gain >= 2.5 lbs — indicates a
   /// true plateau rather than normal fluctuation.
   static bool _isPlateaued(List<List<WorkoutSet>> sessions) {
@@ -121,6 +129,12 @@ class LocalRecommendationEngine {
     TrainingMode mode = TrainingMode.hypertrophy,
     ProgressionAlgorithm algorithm = ProgressionAlgorithm.standard,
   }) {
+    if (_isAssisted(exercise)) {
+      return _recommendAssisted(
+        history: allHistory.where((s) => s.exercise == exercise).toList(),
+        mode: mode,
+      );
+    }
     if (algorithm == ProgressionAlgorithm.plateauBreaker) {
       return _recommendPlateauBreaker(
         exercise: exercise,
@@ -134,6 +148,83 @@ class LocalRecommendationEngine {
       category: category,
       allHistory: allHistory,
       mode: mode,
+    );
+  }
+
+  /// Progression for assistance-machine exercises. The tracked weight is
+  /// assistance, not load lifted, so 1RM-based math doesn't apply — progress
+  /// is judged by reps at a given assistance level, and "progression" means
+  /// *reducing* assistance once reps graduate.
+  static Recommendation _recommendAssisted({
+    required List<WorkoutSet> history,
+    TrainingMode mode = TrainingMode.hypertrophy,
+  }) {
+    final isStrength = mode == TrainingMode.strength;
+    final defaultReps = isStrength ? 5 : 8;
+    final graduationReps = isStrength ? 8 : 12;
+    const assistanceDecrement = 5.0;
+
+    final raw =
+        history
+            .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
+            .toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
+
+    if (raw.isEmpty) {
+      return Recommendation(
+        targetReps: defaultReps,
+        targetWeight: 0.0,
+        status: 'NEW EXERCISE: No history — log your first sets',
+        predicted1RM: 0,
+        required1RM: 0,
+        notesInsight:
+            'Assistance-machine exercise detected. Progress is measured by '
+            'reducing assistance weight over time, not increasing it.',
+      );
+    }
+
+    final sessions = _groupBySessions(raw);
+    final lastSess = sessions.last;
+    // Lowest assistance in the session is the hardest set (least help).
+    final lastAssistance = lastSess.map((s) => s.weight).reduce(min);
+    final lastAvgReps =
+        lastSess.map((s) => s.reps).reduce((a, b) => a + b) / lastSess.length;
+    final hadFormIssue = lastSess.any((s) => _isFormIssue(s.comment));
+
+    double targetWeight;
+    int targetReps;
+    String status;
+
+    if (hadFormIssue) {
+      targetWeight = lastAssistance;
+      targetReps = defaultReps;
+      status = 'FORM FOCUS: Repeat assistance level to nail technique';
+    } else if (lastAssistance <= 0) {
+      targetWeight = 0.0;
+      targetReps = lastAvgReps >= graduationReps
+          ? defaultReps + 2
+          : defaultReps;
+      status = 'BODYWEIGHT: No assistance needed — add reps to progress';
+    } else if (lastAvgReps >= graduationReps) {
+      targetWeight = max(0.0, lastAssistance - assistanceDecrement);
+      targetReps = defaultReps;
+      status = 'ASSISTED PROGRESSION: Assistance reduced';
+    } else {
+      targetWeight = lastAssistance;
+      targetReps = graduationReps;
+      status = 'ASSISTED VOLUME: Push for $graduationReps reps';
+    }
+
+    return Recommendation(
+      targetReps: targetReps,
+      targetWeight: targetWeight,
+      status: status,
+      predicted1RM: 0,
+      required1RM: 0,
+      notesInsight:
+          'Assistance-machine exercise — less assistance weight means more '
+          'progress. Estimated-1RM tracking is skipped since it doesn\'t '
+          'apply to assistance values.',
     );
   }
 
@@ -329,17 +420,218 @@ class LocalRecommendationEngine {
     );
   }
 
+  /// Cycles intensity for exercises the user has flagged as chronically
+  /// slow-progressing, instead of chasing a straight line up. Design and
+  /// numeric parameters are from docs/research/plateau-breaker-algorithm.md:
+  /// a 3-session repeating wave (Heavy 5 reps @110% → Moderate 10 reps
+  /// @100% → Light 18 reps @67.5%, all relative to a 3-session rolling-average
+  /// working weight), with a noise-resistant 6-session rolling 3-vs-3-average
+  /// exit check (≥6% e1RM gain and a positive slope hands control back to
+  /// [_recommendStandard]).
   static Recommendation _recommendPlateauBreaker({
     required String exercise,
     required String category,
     required List<WorkoutSet> allHistory,
     TrainingMode mode = TrainingMode.hypertrophy,
   }) {
-    return _recommendStandard(
-      exercise: exercise,
-      category: category,
-      allHistory: allHistory,
-      mode: mode,
+    final bool isStrength = mode == TrainingMode.strength;
+
+    final raw =
+        allHistory
+            .where((s) => s.exercise == exercise)
+            .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
+            .toList()
+          ..sort((a, b) => a.date.compareTo(b.date));
+
+    if (raw.isEmpty) {
+      return Recommendation(
+        targetReps: isStrength ? 5 : 10,
+        targetWeight: 0.0,
+        status: 'NEW EXERCISE: No history — log your first sets',
+        predicted1RM: 0,
+        required1RM: 0,
+        notesInsight:
+            'No sets logged yet. Plateau-breaker cycle will begin once you '
+            'have at least 3 quality sessions.',
+      );
+    }
+
+    final sessions = _groupBySessions(raw);
+    final workingSessions = sessions
+        .map((sess) {
+          final maxW = sess.map((s) => s.weight).reduce(max);
+          return sess
+              .where((s) => maxW == 0 || s.weight >= 0.6 * maxW)
+              .toList();
+        })
+        .where((sess) => sess.isNotEmpty)
+        .toList();
+
+    // Not enough history to compute a meaningful wave/trend yet.
+    if (workingSessions.length < 3) {
+      return _recommendStandard(
+        exercise: exercise,
+        category: category,
+        allHistory: allHistory,
+        mode: mode,
+      );
+    }
+
+    final lastSess = workingSessions.last;
+    final lastMaxW = lastSess.map((s) => s.weight).reduce(max);
+    final last1RM = lastSess
+        .map((s) => calcOneRM(s.weight, s.reps))
+        .reduce(max);
+    final hadFormIssue = lastSess.any((s) => _isFormIssue(s.comment));
+    final hadFatigue = lastSess.any((s) => _isFatigue(s.comment));
+
+    // Robust trend window: last 6 sessions (or fewer if not yet available),
+    // compared as rolling 3-vs-3 averages rather than a single noisy point —
+    // this is what avoids the false-positive the crude first-vs-max
+    // `_isPlateaued` check produces on noisy single sessions.
+    final windowSize = min(6, workingSessions.length);
+    final window = workingSessions.sublist(workingSessions.length - windowSize);
+    final e1RMs = window
+        .map((sess) => sess.map((s) => calcOneRM(s.weight, s.reps)).reduce(max))
+        .toList();
+
+    final n = e1RMs.length;
+    final sliceSize = min(3, n);
+    final firstSlice = e1RMs.sublist(0, sliceSize);
+    final lastSlice = e1RMs.sublist(n - sliceSize);
+    final firstAvg = firstSlice.reduce((a, b) => a + b) / firstSlice.length;
+    final lastAvg = lastSlice.reduce((a, b) => a + b) / lastSlice.length;
+    final pctChange = firstAvg == 0
+        ? 0.0
+        : (lastAvg - firstAvg) / firstAvg * 100;
+    final trendSlope = _slope(e1RMs);
+
+    // Exit condition: the plateau has genuinely broken — hand back to the
+    // standard algorithm. Uses a higher threshold (6%) than the implicit
+    // "stay in cycle" range so the mode doesn't flap on borderline data.
+    if (pctChange >= 6.0 && trendSlope > 0) {
+      final result = _recommendStandard(
+        exercise: exercise,
+        category: category,
+        allHistory: allHistory,
+        mode: mode,
+      );
+      return Recommendation(
+        targetReps: result.targetReps,
+        targetWeight: result.targetWeight,
+        status:
+            'PLATEAU-BREAKER: Plateau broken (+${pctChange.toStringAsFixed(1)}% '
+            'over last $n sessions) — standard progression resumed',
+        predicted1RM: result.predicted1RM,
+        required1RM: result.required1RM,
+        notesInsight:
+            'Your plateau-breaker cycle worked — 1RM is trending up again. '
+            'Switching back to normal linear progression. ${result.notesInsight}',
+      );
+    }
+
+    if (hadFormIssue) {
+      final formReps = isStrength ? 5 : 10;
+      return Recommendation(
+        targetReps: formReps,
+        targetWeight: lastMaxW,
+        status: 'FORM FOCUS: Repeat weight to nail technique',
+        predicted1RM: last1RM,
+        required1RM: lastMaxW * (1 + 0.0333 * formReps),
+        notesInsight:
+            'Form issues were logged last session — pausing the '
+            'plateau-breaker cycle until technique is solid.',
+      );
+    }
+
+    // Wave phase derived from total qualifying session count (stateless —
+    // recommend() has no persisted "cycle start" marker to count from).
+    final baselineWindow = workingSessions.sublist(
+      workingSessions.length - min(3, workingSessions.length),
+    );
+    final baselineWeight =
+        baselineWindow
+            .map((sess) => sess.map((s) => s.weight).reduce(max))
+            .reduce((a, b) => a + b) /
+        baselineWindow.length;
+
+    final phaseIndex = workingSessions.length % 3;
+    final waveNumber = workingSessions.length ~/ 3;
+
+    final (
+      targetReps,
+      rawWeight,
+      phaseLabel,
+      phaseDetail,
+    ) = switch (phaseIndex) {
+      0 => (
+        5,
+        baselineWeight * 1.10,
+        'Heavy Wave',
+        'Low reps, elevated load — novel stimulus',
+      ),
+      1 => (
+        10,
+        baselineWeight * 1.00,
+        'Moderate Wave',
+        'Baseline reload — reinforce normal rep range',
+      ),
+      _ => (
+        18,
+        baselineWeight * 0.675,
+        'Light Wave',
+        'High-rep deload — recover work capacity',
+      ),
+    };
+
+    double targetWeight = (rawWeight / 2.5).round() * 2.5;
+    if (targetWeight <= 0) targetWeight = lastMaxW;
+
+    // Category safety clamp on the Heavy phase only — reuses the same
+    // threshold table as the standard algorithm.
+    const thresholds = <String, double>{
+      'Legs': 0.95,
+      'Chest': 0.95,
+      'Back': 0.95,
+      'Shoulders': 0.90,
+      'Arms': 0.85,
+    };
+    final threshold = thresholds[category] ?? 0.95;
+    double required1RM = targetWeight * (1 + 0.0333 * targetReps);
+    if (phaseIndex == 0 && last1RM > 0 && required1RM > last1RM * threshold) {
+      targetWeight =
+          (_workingWeight(last1RM * threshold, targetReps) / 2.5).round() * 2.5;
+      required1RM = targetWeight * (1 + 0.0333 * targetReps);
+    }
+
+    final status =
+        'PLATEAU-BREAKER: $phaseLabel '
+        '(session ${phaseIndex + 1}/3, wave $waveNumber)';
+
+    final insights = <String>[
+      '$phaseDetail.',
+      'Trailing $n-session e1RM change: ${pctChange.toStringAsFixed(1)}% — '
+          'still within plateau range (exits automatically at +6% with a '
+          'rising trend).',
+    ];
+    if (hadFatigue) {
+      insights.add('Fatigue was logged last session — consider extra rest.');
+    }
+    if (workingSessions.length >= 12 && pctChange < 6.0) {
+      insights.add(
+        'This exercise has been in the plateau-breaker cycle for 12+ '
+        'sessions without resolving. Consider reviewing recovery, '
+        'nutrition, or swapping the exercise variation.',
+      );
+    }
+
+    return Recommendation(
+      targetReps: targetReps,
+      targetWeight: targetWeight,
+      status: status,
+      predicted1RM: last1RM,
+      required1RM: required1RM,
+      notesInsight: insights.join(' '),
     );
   }
 }

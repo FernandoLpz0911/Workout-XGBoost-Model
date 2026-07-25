@@ -701,4 +701,305 @@ void main() {
       expect(rec.status, isNot(contains('DELOAD')));
     });
   });
+
+  group('recommend — plateau breaker', () {
+    List<WorkoutSet> flatSessions(
+      int count, {
+      double weight = 100,
+      int reps = 10,
+    }) {
+      final base = DateTime(2026, 1, 1);
+      return List.generate(
+        count,
+        (i) => ws(
+          base.add(Duration(days: i * 7)),
+          'Cable Curl',
+          'Chest',
+          weight,
+          reps,
+        ),
+      );
+    }
+
+    test('falls back to the standard algorithm with fewer than 3 sessions', () {
+      final history = flatSessions(2);
+      final plateau = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: history,
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+      );
+      final standard = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: history,
+        algorithm: ProgressionAlgorithm.standard,
+      );
+      expect(plateau.status, standard.status);
+      expect(plateau.targetWeight, standard.targetWeight);
+      expect(plateau.targetReps, standard.targetReps);
+    });
+
+    test('3 flat sessions land on the Heavy wave phase', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: flatSessions(3),
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+      );
+      expect(rec.status, contains('PLATEAU-BREAKER: Heavy Wave'));
+      expect(rec.status, contains('session 1/3'));
+      expect(rec.targetReps, 5);
+      // 110% of the flat 100 lb baseline, clamped by the 95% Chest safety
+      // threshold against last session's e1RM.
+      expect(rec.targetWeight, 107.5);
+    });
+
+    test('4 flat sessions land on the Moderate wave phase', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: flatSessions(4),
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+      );
+      expect(rec.status, contains('PLATEAU-BREAKER: Moderate Wave'));
+      expect(rec.status, contains('session 2/3'));
+      expect(rec.targetReps, 10);
+      expect(rec.targetWeight, 100.0);
+    });
+
+    test('5 flat sessions land on the Light wave phase', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: flatSessions(5),
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+      );
+      expect(rec.status, contains('PLATEAU-BREAKER: Light Wave'));
+      expect(rec.status, contains('session 3/3'));
+      expect(rec.targetReps, 18);
+      expect(rec.targetWeight, 67.5);
+    });
+
+    test('6 flat sessions start a second wave back on Heavy', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: flatSessions(6),
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+      );
+      expect(rec.status, contains('PLATEAU-BREAKER: Heavy Wave'));
+      expect(rec.status, contains('wave 2'));
+    });
+
+    test(
+      'exits back to the standard algorithm once the trend is clearly rising',
+      () {
+        final base = DateTime(2026, 1, 1);
+        final weights = [80.0, 85.0, 90.0, 110.0, 115.0, 120.0];
+        final history = List.generate(
+          weights.length,
+          (i) => ws(
+            base.add(Duration(days: i * 7)),
+            'Cable Curl',
+            'Chest',
+            weights[i],
+            10,
+          ),
+        );
+        final rec = LocalRecommendationEngine.recommend(
+          exercise: 'Cable Curl',
+          category: 'Chest',
+          allHistory: history,
+          algorithm: ProgressionAlgorithm.plateauBreaker,
+        );
+        final standard = LocalRecommendationEngine.recommend(
+          exercise: 'Cable Curl',
+          category: 'Chest',
+          allHistory: history,
+          algorithm: ProgressionAlgorithm.standard,
+        );
+        expect(rec.status, contains('PLATEAU-BREAKER: Plateau broken'));
+        expect(rec.status, contains('standard progression resumed'));
+        expect(rec.targetWeight, standard.targetWeight);
+        expect(rec.targetReps, standard.targetReps);
+        expect(rec.notesInsight, contains('cycle worked'));
+      },
+    );
+
+    test('form issue pauses the cycle and repeats the last weight', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Cable Curl', 'Chest', 100, 10),
+        ws(base.add(const Duration(days: 7)), 'Cable Curl', 'Chest', 100, 10),
+        ws(
+          base.add(const Duration(days: 14)),
+          'Cable Curl',
+          'Chest',
+          100,
+          10,
+          comment: 'form felt sloppy',
+        ),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: history,
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+      );
+      expect(rec.status, contains('FORM FOCUS'));
+      expect(rec.targetWeight, 100.0);
+    });
+
+    test('flags a stuck cycle after 12+ sessions without breaking out', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: flatSessions(12),
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+      );
+      expect(rec.notesInsight, contains('12+'));
+    });
+  });
+
+  group('recommend — assisted exercises', () {
+    test('routes to assisted handling regardless of the chosen algorithm', () {
+      final base = DateTime(2026, 1, 1);
+      final history = List.generate(
+        3,
+        (i) => ws(
+          base.add(Duration(days: i * 7)),
+          'Assisted Pull Up',
+          'Back',
+          40,
+          12,
+        ),
+      );
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Assisted Pull Up',
+        category: 'Back',
+        allHistory: history,
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+      );
+      // 3 qualifying sessions would normally land on the plateau-breaker's
+      // Heavy wave phase — confirms the assisted check short-circuits that.
+      expect(rec.status, isNot(contains('PLATEAU-BREAKER')));
+      expect(rec.status, contains('ASSISTED PROGRESSION'));
+    });
+
+    test('matches "assisted" case-insensitively', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'assisted dip',
+        category: 'Chest',
+        allHistory: const [],
+      );
+      expect(rec.notesInsight, contains('reducing assistance'));
+    });
+
+    test('new exercise returns a baseline recommendation', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Assisted Pull Up',
+        category: 'Back',
+        allHistory: const [],
+      );
+      expect(rec.status, contains('NEW EXERCISE'));
+      expect(rec.targetWeight, 0.0);
+      expect(rec.notesInsight, contains('reducing assistance'));
+    });
+
+    test('reduces assistance by 5 lbs once reps graduate', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Assisted Pull Up', 'Back', 40, 12),
+        ws(base, 'Assisted Pull Up', 'Back', 40, 12),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Assisted Pull Up',
+        category: 'Back',
+        allHistory: history,
+        mode: TrainingMode.hypertrophy,
+      );
+      expect(rec.status, contains('ASSISTED PROGRESSION'));
+      expect(rec.targetWeight, 35.0);
+    });
+
+    test('assistance reduction never goes below zero', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [ws(base, 'Assisted Pull Up', 'Back', 2.5, 12)];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Assisted Pull Up',
+        category: 'Back',
+        allHistory: history,
+      );
+      expect(rec.status, contains('ASSISTED PROGRESSION'));
+      expect(rec.targetWeight, 0.0);
+    });
+
+    test('holds assistance and targets graduation reps below target', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [ws(base, 'Assisted Pull Up', 'Back', 40, 8)];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Assisted Pull Up',
+        category: 'Back',
+        allHistory: history,
+        mode: TrainingMode.hypertrophy,
+      );
+      expect(rec.status, contains('ASSISTED VOLUME'));
+      expect(rec.targetWeight, 40.0);
+      expect(rec.targetReps, 12);
+    });
+
+    test('zero assistance is flagged as a bodyweight milestone', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [ws(base, 'Assisted Pull Up', 'Back', 0, 6)];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Assisted Pull Up',
+        category: 'Back',
+        allHistory: history,
+      );
+      expect(rec.status, contains('BODYWEIGHT'));
+      expect(rec.targetWeight, 0.0);
+    });
+
+    test('bodyweight reps beyond graduation add reps rather than load', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [ws(base, 'Assisted Pull Up', 'Back', 0, 15)];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Assisted Pull Up',
+        category: 'Back',
+        allHistory: history,
+        mode: TrainingMode.hypertrophy,
+      );
+      expect(rec.status, contains('BODYWEIGHT'));
+      expect(rec.targetReps, 10);
+    });
+
+    test('form issue holds assistance weight steady', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Assisted Pull Up', 'Back', 30, 12, comment: 'lost balance'),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Assisted Pull Up',
+        category: 'Back',
+        allHistory: history,
+      );
+      expect(rec.status, contains('FORM FOCUS'));
+      expect(rec.targetWeight, 30.0);
+    });
+
+    test('uses the lowest assistance in a session as the hardest set', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Assisted Pull Up', 'Back', 40, 8),
+        ws(base, 'Assisted Pull Up', 'Back', 25, 8),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Assisted Pull Up',
+        category: 'Back',
+        allHistory: history,
+      );
+      expect(rec.targetWeight, 25.0);
+    });
+  });
 }
