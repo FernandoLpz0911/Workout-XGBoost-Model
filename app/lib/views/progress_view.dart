@@ -43,6 +43,7 @@ class _ProgressViewState extends State<ProgressView> {
   _Scope _scope = _Scope.exercise;
 
   // Exercise scope
+  String? _selectedCategory;
   String? _selectedExercise;
   String _metric = 'Est. 1RM';
   static const _metrics = ['Est. 1RM', 'Max Weight', 'Volume'];
@@ -108,14 +109,13 @@ class _ProgressViewState extends State<ProgressView> {
   }
 
   Widget _buildExercise(LogViewModel vm) {
-    final exercises =
-        vm.exerciseDict.entries
-            .where((e) => exerciseTypeOf(e.key) == ExerciseType.strength)
-            .expand((e) => e.value)
+    final categories =
+        vm.exerciseDict.keys
+            .where((c) => exerciseTypeOf(c) == ExerciseType.strength)
             .toList()
           ..sort();
 
-    if (exercises.isEmpty) {
+    if (categories.isEmpty) {
       return const _EmptyState(
         title: 'No strength data yet.',
         subtitle:
@@ -123,21 +123,42 @@ class _ProgressViewState extends State<ProgressView> {
       );
     }
 
-    if (_selectedExercise == null || !exercises.contains(_selectedExercise)) {
-      _selectedExercise = exercises.first;
+    if (_selectedCategory == null || !categories.contains(_selectedCategory)) {
+      _selectedCategory = categories.first;
     }
 
-    final data = _computeExerciseData(
-      vm.history,
-      _selectedExercise!,
-      _metric,
-      _daysBack,
-    );
+    final exercises = vm.exerciseDict[_selectedCategory] ?? const <String>[];
+    if (_selectedExercise == null || !exercises.contains(_selectedExercise)) {
+      _selectedExercise = exercises.isNotEmpty ? exercises.first : null;
+    }
+
+    final data = _selectedExercise == null
+        ? const <_Point>[]
+        : _computeExerciseData(
+            vm.history,
+            _selectedExercise!,
+            _metric,
+            _daysBack,
+          );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         DropdownButtonFormField<String>(
+          decoration: const InputDecoration(labelText: 'Category'),
+          initialValue: _selectedCategory,
+          items: categories
+              .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+              .toList(),
+          onChanged: (v) => setState(() {
+            _selectedCategory = v;
+            final exs = vm.exerciseDict[v] ?? const <String>[];
+            _selectedExercise = exs.isNotEmpty ? exs.first : null;
+          }),
+        ),
+        const SizedBox(height: 12),
+        DropdownButtonFormField<String>(
+          key: ValueKey(_selectedCategory),
           decoration: const InputDecoration(labelText: 'Exercise'),
           initialValue: _selectedExercise,
           items: exercises
@@ -598,8 +619,7 @@ class _Chart extends StatelessWidget {
         lineBarsData: [
           LineChartBarData(
             spots: spots,
-            isCurved: true,
-            curveSmoothness: 0.3,
+            isCurved: false,
             color: cs.secondary,
             barWidth: 2.5,
             dotData: FlDotData(
