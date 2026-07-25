@@ -8,42 +8,74 @@ Future<void> showWorkoutCommentDialog(
   BuildContext context,
   LogViewModel vm,
   String dateKey,
-) async {
+) {
   final existing = vm.dayMetadataFor(dateKey);
-  final ctrl = TextEditingController(text: existing.comment);
-  await showDialog<void>(
+  return showDialog<void>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
+    builder: (_) => _WorkoutCommentDialog(
+      initialComment: existing.comment,
+      onSave: (comment) => vm.setDayMetadata(
+        dateKey,
+        DayMetadata(
+          comment: comment,
+          startTime: existing.startTime,
+          endTime: existing.endTime,
+        ),
+      ),
+    ),
+  );
+}
+
+/// Content of [showWorkoutCommentDialog]. Owns its [TextEditingController]
+/// so it's only disposed once the dialog widget itself is unmounted — not
+/// immediately after [Navigator.pop], which returns before the dialog's
+/// exit animation (and its last rebuild) has finished.
+class _WorkoutCommentDialog extends StatefulWidget {
+  final String initialComment;
+  final ValueChanged<String> onSave;
+  const _WorkoutCommentDialog({
+    required this.initialComment,
+    required this.onSave,
+  });
+
+  @override
+  State<_WorkoutCommentDialog> createState() => _WorkoutCommentDialogState();
+}
+
+class _WorkoutCommentDialogState extends State<_WorkoutCommentDialog> {
+  late final _ctrl = TextEditingController(text: widget.initialComment);
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
       title: const Text('Workout Comment'),
       content: TextField(
-        controller: ctrl,
+        controller: _ctrl,
         autofocus: true,
         maxLines: 3,
         decoration: const InputDecoration(hintText: 'Comment text...'),
       ),
       actions: [
         TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
+          onPressed: () => Navigator.pop(context),
           child: const Text('Cancel'),
         ),
         ElevatedButton(
           onPressed: () {
-            vm.setDayMetadata(
-              dateKey,
-              DayMetadata(
-                comment: ctrl.text.trim(),
-                startTime: existing.startTime,
-                endTime: existing.endTime,
-              ),
-            );
-            Navigator.pop(dialogContext);
+            widget.onSave(_ctrl.text.trim());
+            Navigator.pop(context);
           },
           child: const Text('Save'),
         ),
       ],
-    ),
-  );
-  ctrl.dispose();
+    );
+  }
 }
 
 /// Shows a dialog to set/edit the start and end time for [dateKey].
