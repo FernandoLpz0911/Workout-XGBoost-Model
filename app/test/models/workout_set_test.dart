@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:repiq/models/weight_unit.dart';
 import 'package:repiq/models/workout_set.dart';
 
 void main() {
@@ -198,6 +199,63 @@ void main() {
         duration: '0:01:30',
       );
       expect(set.displayText, '0:01:30');
+    });
+  });
+
+  group('WorkoutSet — displayTextIn', () {
+    test('strength set shows weight in lbs when unit is lbs', () {
+      final set = WorkoutSet(
+        date: DateTime.now(),
+        exercise: 'Squat',
+        category: 'Legs',
+        weight: 225.0,
+        reps: 5,
+      );
+      expect(set.displayTextIn(WeightUnit.lbs), '225.0 lbs × 5');
+    });
+
+    test('strength set converts weight to kg when unit is kg', () {
+      final set = WorkoutSet(
+        date: DateTime.now(),
+        exercise: 'Squat',
+        category: 'Legs',
+        weight: 100.0,
+        reps: 5,
+      );
+      expect(set.displayTextIn(WeightUnit.kg), '45.4 kg × 5');
+    });
+
+    test('cardio with duration ignores weight unit', () {
+      final set = WorkoutSet(
+        date: DateTime.now(),
+        exercise: 'General Running',
+        category: 'Cardio',
+        distance: 3.0,
+        distanceUnit: 'mi',
+        duration: '0:24:00',
+      );
+      expect(set.displayTextIn(WeightUnit.kg), '3.00 mi @ 0:24:00');
+    });
+
+    test('cardio without duration ignores weight unit', () {
+      final set = WorkoutSet(
+        date: DateTime.now(),
+        exercise: 'Cycling',
+        category: 'Cardio',
+        distance: 10.0,
+        distanceUnit: 'km',
+      );
+      expect(set.displayTextIn(WeightUnit.kg), '10.00 km');
+    });
+
+    test('time-based set shows the duration string regardless of unit', () {
+      final set = WorkoutSet(
+        date: DateTime.now(),
+        exercise: 'Dead Hang',
+        category: 'Back',
+        duration: '0:01:30',
+      );
+      expect(set.displayTextIn(WeightUnit.kg), '0:01:30');
     });
   });
 
