@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:repiq/models/body_measurement.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/local_storage_service.dart';
 
@@ -367,6 +368,122 @@ void main() {
       await storage.appendSets([original]);
       await storage.updateSet(original, strengthSet(weight: 150.0));
       expect(await storage.count(), 1);
+    });
+  });
+
+  group('loadProgressionAlgorithms', () {
+    test('returns empty map when nothing is saved', () async {
+      expect(await storage.loadProgressionAlgorithms(), isEmpty);
+    });
+  });
+
+  group('saveProgressionAlgorithms / loadProgressionAlgorithms round-trip', () {
+    test('persists and restores algorithm assignments', () async {
+      await storage.saveProgressionAlgorithms({
+        'Bench Press': 'standard',
+        'Squat': 'plateauBreaker',
+      });
+      final loaded = await storage.loadProgressionAlgorithms();
+      expect(loaded['Bench Press'], 'standard');
+      expect(loaded['Squat'], 'plateauBreaker');
+    });
+
+    test('overwrites previous assignments on re-save', () async {
+      await storage.saveProgressionAlgorithms({'Bench Press': 'standard'});
+      await storage.saveProgressionAlgorithms({
+        'Bench Press': 'plateauBreaker',
+      });
+      final loaded = await storage.loadProgressionAlgorithms();
+      expect(loaded['Bench Press'], 'plateauBreaker');
+    });
+  });
+
+  group('loadDayMetadata', () {
+    test('returns empty map when nothing is saved', () async {
+      expect(await storage.loadDayMetadata(), isEmpty);
+    });
+  });
+
+  group('saveDayMetadata / loadDayMetadata round-trip', () {
+    test('persists and restores day metadata keyed by date', () async {
+      await storage.saveDayMetadata({
+        '2026-01-15': {
+          'comment': 'great session',
+          'startTime': '09:00',
+          'endTime': '10:00',
+        },
+      });
+      final loaded = await storage.loadDayMetadata();
+      expect(loaded['2026-01-15']?['comment'], 'great session');
+      expect(loaded['2026-01-15']?['startTime'], '09:00');
+      expect(loaded['2026-01-15']?['endTime'], '10:00');
+    });
+
+    test('overwrites previous metadata on re-save', () async {
+      await storage.saveDayMetadata({
+        '2026-01-15': {'comment': 'first'},
+      });
+      await storage.saveDayMetadata({
+        '2026-01-15': {'comment': 'second'},
+      });
+      final loaded = await storage.loadDayMetadata();
+      expect(loaded['2026-01-15']?['comment'], 'second');
+    });
+  });
+
+  group('body measurements', () {
+    test('loadBodyMeasurements returns empty list initially', () async {
+      expect(await storage.loadBodyMeasurements(), isEmpty);
+    });
+
+    test('addBodyMeasurement persists and returns an assigned id', () async {
+      final id = await storage.addBodyMeasurement(
+        BodyMeasurement(
+          date: DateTime(2026, 3, 1),
+          type: BodyMeasurementType.weight,
+          value: 180.0,
+        ),
+      );
+      expect(id, greaterThan(0));
+      final loaded = await storage.loadBodyMeasurements();
+      expect(loaded.length, 1);
+      expect(loaded.first.id, id);
+      expect(loaded.first.value, 180.0);
+      expect(loaded.first.type, BodyMeasurementType.weight);
+    });
+
+    test('addBodyMeasurement round-trips a body fat reading', () async {
+      await storage.addBodyMeasurement(
+        BodyMeasurement(
+          date: DateTime(2026, 3, 1),
+          type: BodyMeasurementType.bodyFat,
+          value: 18.5,
+        ),
+      );
+      final loaded = await storage.loadBodyMeasurements();
+      expect(loaded.first.type, BodyMeasurementType.bodyFat);
+      expect(loaded.first.value, 18.5);
+    });
+
+    test('deleteBodyMeasurement removes only the targeted reading', () async {
+      final keepId = await storage.addBodyMeasurement(
+        BodyMeasurement(
+          date: DateTime(2026, 3, 1),
+          type: BodyMeasurementType.weight,
+          value: 180.0,
+        ),
+      );
+      final removeId = await storage.addBodyMeasurement(
+        BodyMeasurement(
+          date: DateTime(2026, 3, 2),
+          type: BodyMeasurementType.weight,
+          value: 181.0,
+        ),
+      );
+      await storage.deleteBodyMeasurement(removeId);
+      final loaded = await storage.loadBodyMeasurements();
+      expect(loaded.length, 1);
+      expect(loaded.first.id, keepId);
     });
   });
 
