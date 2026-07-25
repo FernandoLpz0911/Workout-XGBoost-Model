@@ -484,7 +484,9 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
       await _loadHistory();
       _rebuildDict();
       _loadTodaySession();
-      lastActionMessage = 'Imported $count sets from CSV.';
+      lastActionMessage = count > 0
+          ? 'Imported $count sets from CSV.'
+          : 'No new sets found — everything in that file is already imported.';
       if (count > 0) NotificationService.scheduleWorkoutReminder();
     } catch (e) {
       lastActionMessage = 'Import failed: $e';

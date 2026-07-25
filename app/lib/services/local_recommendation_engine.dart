@@ -74,12 +74,16 @@ class LocalRecommendationEngine {
 
   static bool _isDropSet(String c) {
     final s = c.toLowerCase();
-    return s.contains('dropset') || s.contains('drop set') || s.contains('no rest');
+    return s.contains('dropset') ||
+        s.contains('drop set') ||
+        s.contains('no rest');
   }
 
   static bool _isWarmup(String c) {
     final s = c.toLowerCase();
-    return s.contains('warmup') || s.contains('warm up') || s.contains('warm-up');
+    return s.contains('warmup') ||
+        s.contains('warm up') ||
+        s.contains('warm-up');
   }
 
   /// True when the last 4 sessions show no 1RM gain >= 2.5 lbs — indicates a
