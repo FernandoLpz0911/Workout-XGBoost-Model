@@ -31,18 +31,30 @@ android {
         versionName = flutter.versionName
     }
 
+    // Release signing only configures itself when the REPIQ_* keystore properties are
+    // supplied (a real release build). Without them — e.g. CI building a debug/test
+    // APK — release falls back to the auto-generated debug key instead of crashing
+    // Gradle configuration on a null keystore path.
+    val hasReleaseKeystore = project.hasProperty("REPIQ_STORE_FILE")
+
     signingConfigs {
-        create("release") {
-            storeFile = file(project.findProperty("REPIQ_STORE_FILE") as String)
-            storePassword = project.findProperty("REPIQ_STORE_PASSWORD") as String
-            keyAlias = project.findProperty("REPIQ_KEY_ALIAS") as String
-            keyPassword = project.findProperty("REPIQ_KEY_PASSWORD") as String
+        if (hasReleaseKeystore) {
+            create("release") {
+                storeFile = file(project.property("REPIQ_STORE_FILE") as String)
+                storePassword = project.property("REPIQ_STORE_PASSWORD") as String
+                keyAlias = project.property("REPIQ_KEY_ALIAS") as String
+                keyPassword = project.property("REPIQ_KEY_PASSWORD") as String
+            }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            signingConfig = if (hasReleaseKeystore) {
+                signingConfigs.getByName("release")
+            } else {
+                signingConfigs.getByName("debug")
+            }
         }
     }
 }
