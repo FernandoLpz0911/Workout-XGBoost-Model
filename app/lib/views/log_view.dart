@@ -5,6 +5,7 @@ import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/rest_timer.dart';
 import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
+import 'package:repiq/views/widgets/day_metadata_dialogs.dart';
 import 'package:repiq/views/widgets/note_indicator.dart';
 
 export 'package:repiq/viewmodels/log_viewmodel.dart' show TrainingMode;
@@ -22,53 +23,68 @@ class LogView extends StatelessWidget {
           return const Center(child: CircularProgressIndicator());
         }
         return Scaffold(
-          body: vm.session.isEmpty
-              ? _EmptySessionView(onAdd: () => _showAddExercise(context, vm))
-              : ListView.builder(
-                  padding: const EdgeInsets.symmetric(vertical: 8),
-                  itemCount: vm.session.length,
-                  itemBuilder: (context, i) {
-                    final ex = vm.session[i];
-                    final setCount = ex.sets.length;
-                    return ListTile(
-                      contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 16,
-                        vertical: 4,
-                      ),
-                      title: Text(
-                        ex.exercise,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
-                        ),
-                      ),
-                      subtitle: Text(
-                        setCount == 0
-                            ? ex.category
-                            : '${ex.category}  ·  $setCount ${setCount == 1 ? "set" : "sets"}',
-                        style: const TextStyle(
-                          color: Colors.grey,
-                          fontSize: 12,
-                        ),
-                      ),
-                      trailing: IconButton(
-                        icon: const Icon(
-                          Icons.close,
-                          color: Colors.grey,
-                          size: 20,
-                        ),
-                        tooltip: 'Remove exercise',
-                        onPressed: () => _confirmRemove(context, vm, i),
-                      ),
-                      onTap: () => Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => _ExerciseDetailPage(exerciseIndex: i),
-                        ),
-                      ),
-                    );
-                  },
+          body: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                child: DayMetaBanner(
+                  dateKey: LogViewModel.fmtDate(DateTime.now()),
                 ),
+              ),
+              Expanded(
+                child: vm.session.isEmpty
+                    ? _EmptySessionView(
+                        onAdd: () => _showAddExercise(context, vm),
+                      )
+                    : ListView.builder(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        itemCount: vm.session.length,
+                        itemBuilder: (context, i) {
+                          final ex = vm.session[i];
+                          final setCount = ex.sets.length;
+                          return ListTile(
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 4,
+                            ),
+                            title: Text(
+                              ex.exercise,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                              ),
+                            ),
+                            subtitle: Text(
+                              setCount == 0
+                                  ? ex.category
+                                  : '${ex.category}  ·  $setCount ${setCount == 1 ? "set" : "sets"}',
+                              style: const TextStyle(
+                                color: Colors.grey,
+                                fontSize: 12,
+                              ),
+                            ),
+                            trailing: IconButton(
+                              icon: const Icon(
+                                Icons.close,
+                                color: Colors.grey,
+                                size: 20,
+                              ),
+                              tooltip: 'Remove exercise',
+                              onPressed: () => _confirmRemove(context, vm, i),
+                            ),
+                            onTap: () => Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    _ExerciseDetailPage(exerciseIndex: i),
+                              ),
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
           floatingActionButton: FloatingActionButton.extended(
             onPressed: () => _showAddExercise(context, vm),
             icon: const Icon(Icons.fitness_center),

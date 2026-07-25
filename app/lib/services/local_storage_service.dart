@@ -5,6 +5,7 @@ import 'package:path/path.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite/sqflite.dart';
 
+import 'package:repiq/models/body_measurement.dart';
 import 'package:repiq/models/workout_set.dart';
 
 /// Persists all local workout data in a SQLite database.
@@ -19,6 +20,7 @@ import 'package:repiq/models/workout_set.dart';
 class LocalStorageService {
   static const _modesKey = 'training_modes_v1';
   static const _algorithmsKey = 'progression_algorithms_v1';
+  static const _dayMetadataKey = 'day_metadata_v1';
   static const _migratedKey = 'sqflite_migrated_v1';
 
   LocalStorageService({String? dbPath}) : _dbPath = dbPath;
@@ -31,25 +33,42 @@ class LocalStorageService {
     return _db!;
   }
 
+  static const _bodyMeasurementsTable = '''
+    CREATE TABLE body_measurements (
+      id       INTEGER PRIMARY KEY AUTOINCREMENT,
+      date_iso TEXT NOT NULL,
+      type     TEXT NOT NULL,
+      value    REAL NOT NULL
+    )
+  ''';
+
   Future<Database> _openDb() async {
     final path = _dbPath ?? join(await getDatabasesPath(), 'repiq.db');
     return openDatabase(
       path,
-      version: 1,
-      onCreate: (db, _) => db.execute('''
-        CREATE TABLE sets (
-          fingerprint   TEXT PRIMARY KEY,
-          date_iso      TEXT NOT NULL,
-          exercise      TEXT NOT NULL,
-          category      TEXT NOT NULL,
-          weight        REAL NOT NULL DEFAULT 0.0,
-          reps          INTEGER NOT NULL DEFAULT 0,
-          distance      REAL,
-          distance_unit TEXT,
-          duration      TEXT,
-          comment       TEXT NOT NULL DEFAULT ""
-        )
-      '''),
+      version: 2,
+      onCreate: (db, _) async {
+        await db.execute('''
+          CREATE TABLE sets (
+            fingerprint   TEXT PRIMARY KEY,
+            date_iso      TEXT NOT NULL,
+            exercise      TEXT NOT NULL,
+            category      TEXT NOT NULL,
+            weight        REAL NOT NULL DEFAULT 0.0,
+            reps          INTEGER NOT NULL DEFAULT 0,
+            distance      REAL,
+            distance_unit TEXT,
+            duration      TEXT,
+            comment       TEXT NOT NULL DEFAULT ""
+          )
+        ''');
+        await db.execute(_bodyMeasurementsTable);
+      },
+      onUpgrade: (db, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await db.execute(_bodyMeasurementsTable);
+        }
+      },
     );
   }
 
@@ -218,6 +237,52 @@ class LocalStorageService {
   Future<void> saveProgressionAlgorithms(Map<String, String> algorithms) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_algorithmsKey, jsonEncode(algorithms));
+  }
+
+  /// Loads whole-day metadata (comment, start/end time) keyed by "yyyy-MM-dd".
+  Future<Map<String, Map<String, dynamic>>> loadDayMetadata() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_dayMetadataKey);
+    if (raw == null || raw.isEmpty) return {};
+    final decoded = jsonDecode(raw) as Map<String, dynamic>;
+    return decoded.map((k, v) => MapEntry(k, (v as Map<String, dynamic>)));
+  }
+
+  Future<void> saveDayMetadata(Map<String, Map<String, dynamic>> data) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_dayMetadataKey, jsonEncode(data));
+  }
+
+  Future<List<BodyMeasurement>> loadBodyMeasurements() async {
+    final db = await _database;
+    final rows = await db.query('body_measurements', orderBy: 'date_iso ASC');
+    return rows
+        .map(
+          (r) => BodyMeasurement(
+            id: r['id'] as int,
+            date: DateTime.parse(r['date_iso'] as String),
+            type: (r['type'] as String) == 'bodyFat'
+                ? BodyMeasurementType.bodyFat
+                : BodyMeasurementType.weight,
+            value: (r['value'] as num).toDouble(),
+          ),
+        )
+        .toList();
+  }
+
+  /// Inserts a new reading and returns its assigned row id.
+  Future<int> addBodyMeasurement(BodyMeasurement m) async {
+    final db = await _database;
+    return db.insert('body_measurements', {
+      'date_iso': m.date.toIso8601String(),
+      'type': m.type.name,
+      'value': m.value,
+    });
+  }
+
+  Future<void> deleteBodyMeasurement(int id) async {
+    final db = await _database;
+    await db.delete('body_measurements', where: 'id = ?', whereArgs: [id]);
   }
 
   /// Day-level fingerprint used as the SQLite PRIMARY KEY and Firestore doc ID.
