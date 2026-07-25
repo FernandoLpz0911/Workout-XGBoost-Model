@@ -5,6 +5,7 @@ import 'package:repiq/services/rest_timer.dart';
 import 'package:repiq/services/theme_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
+import 'package:repiq/views/calendar_view.dart';
 import 'package:repiq/views/history_view.dart';
 import 'package:repiq/views/log_view.dart';
 import 'package:repiq/views/onboarding_view.dart';
@@ -127,7 +128,19 @@ class _AppShellState extends State<_AppShell> {
     return Scaffold(
       appBar: AppBar(
         title: Text(_titles[_index]),
-        actions: const [_TimerAction(), SizedBox(width: 8)],
+        actions: [
+          if (_index == 2)
+            IconButton(
+              icon: const Icon(Icons.calendar_month_outlined),
+              tooltip: 'Calendar',
+              onPressed: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const CalendarView()),
+              ),
+            ),
+          const _TimerAction(),
+          const SizedBox(width: 8),
+        ],
       ),
       body: IndexedStack(index: _index, children: _pages),
       bottomNavigationBar: NavigationBar(

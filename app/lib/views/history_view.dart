@@ -80,18 +80,23 @@ class _DayCard extends StatelessWidget {
           style: const TextStyle(color: Colors.grey, fontSize: 13),
         ),
         children: byExercise.entries
-            .map((e) => _ExerciseHistory(exercise: e.key, sets: e.value))
+            .map((e) => ExerciseHistorySection(exercise: e.key, sets: e.value))
             .toList(),
       ),
     );
   }
 }
 
-/// Exercise name with its logged set rows, shown inside a [_DayCard].
-class _ExerciseHistory extends StatelessWidget {
+/// Exercise name with its logged set rows for one day. Shared by the History
+/// tab's day cards and [DayDetailView].
+class ExerciseHistorySection extends StatelessWidget {
   final String exercise;
   final List<WorkoutSet> sets;
-  const _ExerciseHistory({required this.exercise, required this.sets});
+  const ExerciseHistorySection({
+    super.key,
+    required this.exercise,
+    required this.sets,
+  });
 
   @override
   Widget build(BuildContext context) {
