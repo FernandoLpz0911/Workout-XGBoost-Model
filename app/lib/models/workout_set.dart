@@ -1,3 +1,5 @@
+import 'package:repiq/models/weight_unit.dart';
+
 /// A single logged entry — one set, lap, or passive session.
 ///
 /// Covers three exercise types:
@@ -108,4 +110,23 @@ class WorkoutSet {
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 
   static String fmtDateStatic(DateTime d) => _fmtDate(d);
+}
+
+/// Like [WorkoutSet.displayText], but formats weight in [unit] instead of
+/// always assuming the canonical lbs storage unit.
+extension WorkoutSetUnitDisplay on WorkoutSet {
+  String displayTextIn(WeightUnit unit) {
+    if (duration != null && weight == 0 && reps == 0 && distance == null) {
+      return duration!;
+    }
+    if (distance != null && distance! > 0) {
+      final u = distanceUnit ?? 'mi';
+      if (duration != null) {
+        return '${distance!.toStringAsFixed(2)} $u @ $duration';
+      }
+      return '${distance!.toStringAsFixed(2)} $u';
+    }
+    return '${lbsToDisplay(weight, unit).toStringAsFixed(1)} '
+        '${weightUnitLabel(unit)} × $reps';
+  }
 }

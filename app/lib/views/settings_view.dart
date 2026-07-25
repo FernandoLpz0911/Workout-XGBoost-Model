@@ -2,7 +2,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:repiq/models/weight_unit.dart';
 import 'package:repiq/services/theme_controller.dart';
+import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/views/body_tracker_view.dart';
 import 'package:repiq/views/legal_view.dart';
@@ -17,6 +19,7 @@ class SettingsView extends StatelessWidget {
   Widget build(BuildContext context) {
     final vm = context.watch<LogViewModel>();
     final themeController = context.watch<ThemeController>();
+    final unitsController = context.watch<UnitsController>();
     final cs = Theme.of(context).colorScheme;
 
     return ListView(
@@ -66,6 +69,28 @@ class SettingsView extends StatelessWidget {
                     const Divider(height: 1, indent: 16),
                   _ThemeOptionTile(id: id),
                 ],
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 24),
+        _SectionHeader('Units'),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            child: Row(
+              children: [
+                const Expanded(child: Text('Weight')),
+                SegmentedButton<WeightUnit>(
+                  segments: const [
+                    ButtonSegment(value: WeightUnit.lbs, label: Text('lbs')),
+                    ButtonSegment(value: WeightUnit.kg, label: Text('kg')),
+                  ],
+                  selected: {unitsController.unit},
+                  onSelectionChanged: (s) =>
+                      context.read<UnitsController>().setUnit(s.first),
+                ),
               ],
             ),
           ),

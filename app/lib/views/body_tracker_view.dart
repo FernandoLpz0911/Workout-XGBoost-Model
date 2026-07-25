@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/models/body_measurement.dart';
+import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/utils/date_format.dart';
 import 'package:repiq/viewmodels/body_tracker_viewmodel.dart';
 import 'package:repiq/views/widgets/metric_chart.dart';
@@ -10,10 +11,22 @@ const _typeLabel = {
   BodyMeasurementType.bodyFat: 'Body Fat',
 };
 
-const _typeUnit = {
-  BodyMeasurementType.weight: 'lbs',
-  BodyMeasurementType.bodyFat: '%',
-};
+/// Body fat readings are always a plain percentage; bodyweight readings are
+/// stored canonically in lbs and converted for display via [units].
+String _unitFor(BodyMeasurementType type, UnitsController units) =>
+    type == BodyMeasurementType.weight ? units.label : '%';
+
+double _toDisplay(
+  double value,
+  BodyMeasurementType type,
+  UnitsController units,
+) => type == BodyMeasurementType.weight ? units.toDisplay(value) : value;
+
+double _toStored(
+  double value,
+  BodyMeasurementType type,
+  UnitsController units,
+) => type == BodyMeasurementType.weight ? units.toLbs(value) : value;
 
 /// Body Tracker: log and chart bodyweight / body fat % readings over time.
 /// Owns its own [BodyTrackerViewModel] instance, scoped to this screen only.
@@ -101,11 +114,14 @@ class _BodyTrackerScaffoldState extends State<_BodyTrackerScaffold> {
 
   void _showAddDialog(BuildContext context, BodyMeasurementType type) {
     final vm = context.read<BodyTrackerViewModel>();
+    final units = context.read<UnitsController>();
     showDialog<void>(
       context: context,
       builder: (_) => _AddMeasurementDialog(
         type: type,
-        onSave: (value) => vm.addMeasurement(type, value),
+        unitLabel: _unitFor(type, units),
+        onSave: (value) =>
+            vm.addMeasurement(type, _toStored(value, type, units)),
       ),
     );
   }
@@ -117,6 +133,7 @@ class _HistoryTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final units = context.watch<UnitsController>();
     return Consumer<BodyTrackerViewModel>(
       builder: (context, vm, _) {
         final entries = vm.forType(type).reversed.toList();
@@ -130,7 +147,7 @@ class _HistoryTab extends StatelessWidget {
             ),
           );
         }
-        final unit = _typeUnit[type]!;
+        final unit = _unitFor(type, units);
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: entries.length,
@@ -139,7 +156,9 @@ class _HistoryTab extends StatelessWidget {
             return Card(
               margin: const EdgeInsets.only(bottom: 8),
               child: ListTile(
-                title: Text('${m.value.toStringAsFixed(1)} $unit'),
+                title: Text(
+                  '${_toDisplay(m.value, type, units).toStringAsFixed(1)} $unit',
+                ),
                 subtitle: Text(
                   '${monthAbbrev(m.date.month)} ${m.date.day}, ${m.date.year}',
                 ),
@@ -163,11 +182,12 @@ class _GraphTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final units = context.watch<UnitsController>();
     return Consumer<BodyTrackerViewModel>(
       builder: (context, vm, _) {
         final data = vm
             .forType(type)
-            .map((m) => ChartPoint(m.date, m.value))
+            .map((m) => ChartPoint(m.date, _toDisplay(m.value, type, units)))
             .toList();
         if (data.length < 2) {
           return const Padding(
@@ -175,7 +195,7 @@ class _GraphTab extends StatelessWidget {
             child: NotEnoughChartData(),
           );
         }
-        final unit = _typeUnit[type]!;
+        final unit = _unitFor(type, units);
         return Padding(
           padding: const EdgeInsets.all(16),
           child: MetricChart(
@@ -193,8 +213,13 @@ class _GraphTab extends StatelessWidget {
 
 class _AddMeasurementDialog extends StatefulWidget {
   final BodyMeasurementType type;
+  final String unitLabel;
   final ValueChanged<double> onSave;
-  const _AddMeasurementDialog({required this.type, required this.onSave});
+  const _AddMeasurementDialog({
+    required this.type,
+    required this.unitLabel,
+    required this.onSave,
+  });
 
   @override
   State<_AddMeasurementDialog> createState() => _AddMeasurementDialogState();
@@ -228,7 +253,6 @@ class _AddMeasurementDialogState extends State<_AddMeasurementDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final unit = _typeUnit[widget.type]!;
     return AlertDialog(
       title: Text('Log ${_typeLabel[widget.type]}'),
       content: TextField(
@@ -236,7 +260,7 @@ class _AddMeasurementDialogState extends State<_AddMeasurementDialog> {
         autofocus: true,
         keyboardType: const TextInputType.numberWithOptions(decimal: true),
         decoration: InputDecoration(
-          labelText: 'Value ($unit)',
+          labelText: 'Value (${widget.unitLabel})',
           errorText: _error,
         ),
         onSubmitted: (_) => _save(),

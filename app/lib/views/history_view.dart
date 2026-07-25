@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/exercise_detail_view.dart';
 import 'package:repiq/views/widgets/note_indicator.dart';
@@ -101,6 +102,7 @@ class ExerciseHistorySection extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
+    final unit = context.watch<UnitsController>().unit;
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
@@ -158,7 +160,10 @@ class ExerciseHistorySection extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(s.displayText, style: const TextStyle(fontSize: 13)),
+                  Text(
+                    s.displayTextIn(unit),
+                    style: const TextStyle(fontSize: 13),
+                  ),
                   const SizedBox(width: 4),
                   NoteIndicator(comment: s.comment),
                 ],

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:repiq/models/weight_unit.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/utils/date_format.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/widgets/metric_chart.dart';
@@ -62,6 +64,7 @@ class _ProgressViewState extends State<ProgressView> {
 
   @override
   Widget build(BuildContext context) {
+    final unit = context.watch<UnitsController>().unit;
     return Consumer<LogViewModel>(
       builder: (context, vm, _) {
         if (vm.history.isEmpty) {
@@ -96,8 +99,8 @@ class _ProgressViewState extends State<ProgressView> {
               const SizedBox(height: 16),
               Expanded(
                 child: _scope == _Scope.exercise
-                    ? _buildExercise(vm)
-                    : _buildOverview(vm),
+                    ? _buildExercise(vm, unit)
+                    : _buildOverview(vm, unit),
               ),
             ],
           ),
@@ -106,7 +109,7 @@ class _ProgressViewState extends State<ProgressView> {
     );
   }
 
-  Widget _buildExercise(LogViewModel vm) {
+  Widget _buildExercise(LogViewModel vm, WeightUnit unit) {
     final categories =
         vm.exerciseDict.keys
             .where((c) => exerciseTypeOf(c) == ExerciseType.strength)
@@ -130,7 +133,7 @@ class _ProgressViewState extends State<ProgressView> {
       _selectedExercise = exercises.isNotEmpty ? exercises.first : null;
     }
 
-    final data = _selectedExercise == null
+    final rawData = _selectedExercise == null
         ? const <ChartPoint>[]
         : computeExerciseSeries(
             vm.history,
@@ -138,6 +141,10 @@ class _ProgressViewState extends State<ProgressView> {
             _metric,
             _daysBack,
           );
+    final data = unit == WeightUnit.kg
+        ? rawData.map((p) => ChartPoint(p.date, p.value * kgPerLb)).toList()
+        : rawData;
+    final unitLabel = weightUnitLabel(unit);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -193,15 +200,15 @@ class _ProgressViewState extends State<ProgressView> {
                   tooltipTitle: (d) =>
                       '${monthAbbrev(d.month)} ${d.day}, ${d.year}',
                   tooltipValue: (v) => _metric == 'Volume'
-                      ? '${v.toStringAsFixed(0)} lbs·reps'
-                      : '${v.toStringAsFixed(1)} lbs',
+                      ? '${v.toStringAsFixed(0)} $unitLabel·reps'
+                      : '${v.toStringAsFixed(1)} $unitLabel',
                 ),
         ),
       ],
     );
   }
 
-  Widget _buildOverview(LogViewModel vm) {
+  Widget _buildOverview(LogViewModel vm, WeightUnit unit) {
     final availableMetrics = _period == _Period.workout
         ? const [
             _OverviewMetric.volume,
@@ -213,12 +220,17 @@ class _ProgressViewState extends State<ProgressView> {
       _overviewMetric = _OverviewMetric.volume;
     }
 
-    final data = _computeOverviewData(
+    final rawData = _computeOverviewData(
       vm.history,
       _period,
       _overviewMetric,
       _daysBack,
     );
+    final data =
+        unit == WeightUnit.kg && _overviewMetric == _OverviewMetric.volume
+        ? rawData.map((p) => ChartPoint(p.date, p.value * kgPerLb)).toList()
+        : rawData;
+    final unitLabel = weightUnitLabel(unit);
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -273,7 +285,7 @@ class _ProgressViewState extends State<ProgressView> {
                       : '${monthAbbrev(d.month)} ${d.day}, ${d.year}',
                   tooltipValue: (v) => switch (_overviewMetric) {
                     _OverviewMetric.volume =>
-                      '${v.toStringAsFixed(0)} lbs·reps',
+                      '${v.toStringAsFixed(0)} $unitLabel·reps',
                     _OverviewMetric.sets => '${v.toStringAsFixed(0)} sets',
                     _OverviewMetric.reps => '${v.toStringAsFixed(0)} reps',
                     _OverviewMetric.workouts =>

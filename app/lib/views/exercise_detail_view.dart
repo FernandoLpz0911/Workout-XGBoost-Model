@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:repiq/models/weight_unit.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/utils/date_format.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/widgets/metric_chart.dart';
@@ -75,12 +77,17 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
   Widget _buildGraphTab() {
     return Consumer<LogViewModel>(
       builder: (context, vm, _) {
-        final data = computeExerciseSeries(
+        final unit = context.watch<UnitsController>().unit;
+        final rawData = computeExerciseSeries(
           vm.history,
           widget.exercise,
           _metric,
           _daysBack,
         );
+        final data = unit == WeightUnit.kg
+            ? rawData.map((p) => ChartPoint(p.date, p.value * kgPerLb)).toList()
+            : rawData;
+        final unitLabel = weightUnitLabel(unit);
         return Padding(
           padding: const EdgeInsets.all(16),
           child: Column(
@@ -128,8 +135,8 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                         tooltipTitle: (d) =>
                             '${monthAbbrev(d.month)} ${d.day}, ${d.year}',
                         tooltipValue: (v) => _metric == 'Volume'
-                            ? '${v.toStringAsFixed(0)} lbs·reps'
-                            : '${v.toStringAsFixed(1)} lbs',
+                            ? '${v.toStringAsFixed(0)} $unitLabel·reps'
+                            : '${v.toStringAsFixed(1)} $unitLabel',
                       ),
               ),
             ],
@@ -164,6 +171,7 @@ class _HistoryTab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final unit = context.watch<UnitsController>().unit;
     return Consumer<LogViewModel>(
       builder: (context, vm, _) {
         final sets = vm.history.where((s) => s.exercise == exercise).toList();
@@ -222,7 +230,7 @@ class _HistoryTab extends StatelessWidget {
                               ),
                             ),
                             Text(
-                              s.displayText,
+                              s.displayTextIn(unit),
                               style: const TextStyle(
                                 fontWeight: FontWeight.w600,
                               ),

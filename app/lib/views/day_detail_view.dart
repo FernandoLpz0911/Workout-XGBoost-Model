@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/share_service.dart';
+import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/history_view.dart';
 import 'package:repiq/views/widgets/day_metadata_dialogs.dart';
@@ -30,6 +31,7 @@ class DayDetailView extends StatelessWidget {
                 ShareService.shareDay(
                   dateLabel,
                   vm.historyByDate[dateLabel] ?? const [],
+                  unit: context.read<UnitsController>().unit,
                 );
               }
             },

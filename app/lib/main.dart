@@ -4,6 +4,7 @@ import 'package:repiq/services/notification_service.dart';
 import 'package:repiq/services/rest_timer.dart';
 import 'package:repiq/services/share_service.dart';
 import 'package:repiq/services/theme_controller.dart';
+import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/calendar_view.dart';
@@ -37,6 +38,7 @@ class WorkoutApp extends StatelessWidget {
         ChangeNotifierProvider(create: (_) => LogViewModel()),
         ChangeNotifierProvider(create: (_) => RestTimer()),
         ChangeNotifierProvider(create: (_) => ThemeController()),
+        ChangeNotifierProvider(create: (_) => UnitsController()),
       ],
       child: Consumer<ThemeController>(
         builder: (context, themeController, _) => MaterialApp(
@@ -154,6 +156,7 @@ class _AppShellState extends State<_AppShell> {
                   ShareService.shareDay(
                     today,
                     vm.historyByDate[today] ?? const [],
+                    unit: context.read<UnitsController>().unit,
                   );
                 }
               },
