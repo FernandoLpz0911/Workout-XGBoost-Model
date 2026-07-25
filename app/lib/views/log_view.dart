@@ -1113,6 +1113,7 @@ class _EditValueDialog extends StatefulWidget {
 
 class _EditValueDialogState extends State<_EditValueDialog> {
   late final _ctrl = TextEditingController(text: widget.initial);
+  String? _error;
 
   @override
   void dispose() {
@@ -1127,8 +1128,13 @@ class _EditValueDialogState extends State<_EditValueDialog> {
       content: TextField(
         controller: _ctrl,
         autofocus: true,
-        keyboardType: TextInputType.numberWithOptions(decimal: widget.isDecimal),
-        decoration: InputDecoration(hintText: widget.label),
+        keyboardType: TextInputType.numberWithOptions(
+          decimal: widget.isDecimal,
+        ),
+        decoration: InputDecoration(hintText: widget.label, errorText: _error),
+        onChanged: (_) {
+          if (_error != null) setState(() => _error = null);
+        },
       ),
       actions: [
         TextButton(
@@ -1141,6 +1147,8 @@ class _EditValueDialogState extends State<_EditValueDialog> {
             if (v != null) {
               widget.onConfirm(v);
               Navigator.pop(context);
+            } else {
+              setState(() => _error = 'Enter a valid number');
             }
           },
           child: const Text('OK'),

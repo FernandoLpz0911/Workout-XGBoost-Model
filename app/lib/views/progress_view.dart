@@ -65,7 +65,8 @@ class _ProgressViewState extends State<ProgressView> {
           );
         }
 
-        if (_selectedExercise == null || !exercises.contains(_selectedExercise)) {
+        if (_selectedExercise == null ||
+            !exercises.contains(_selectedExercise)) {
           _selectedExercise = exercises.first;
         }
 
