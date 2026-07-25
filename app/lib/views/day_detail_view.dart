@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/share_service.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/history_view.dart';
 import 'package:repiq/views/widgets/day_metadata_dialogs.dart';
@@ -25,11 +26,17 @@ class DayDetailView extends StatelessWidget {
                 showWorkoutCommentDialog(context, vm, dateLabel);
               } else if (value == 'time') {
                 showWorkoutTimeDialog(context, vm, dateLabel);
+              } else if (value == 'share') {
+                ShareService.shareDay(
+                  dateLabel,
+                  vm.historyByDate[dateLabel] ?? const [],
+                );
               }
             },
             itemBuilder: (_) => const [
               PopupMenuItem(value: 'comment', child: Text('Workout Comment')),
               PopupMenuItem(value: 'time', child: Text('Workout Time')),
+              PopupMenuItem(value: 'share', child: Text('Share Workout')),
             ],
           ),
         ],

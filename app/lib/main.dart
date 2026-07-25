@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/services/notification_service.dart';
 import 'package:repiq/services/rest_timer.dart';
+import 'package:repiq/services/share_service.dart';
 import 'package:repiq/services/theme_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
@@ -149,11 +150,17 @@ class _AppShellState extends State<_AppShell> {
                   showWorkoutCommentDialog(context, vm, today);
                 } else if (value == 'time') {
                   showWorkoutTimeDialog(context, vm, today);
+                } else if (value == 'share') {
+                  ShareService.shareDay(
+                    today,
+                    vm.historyByDate[today] ?? const [],
+                  );
                 }
               },
               itemBuilder: (_) => const [
                 PopupMenuItem(value: 'comment', child: Text('Workout Comment')),
                 PopupMenuItem(value: 'time', child: Text('Workout Time')),
+                PopupMenuItem(value: 'share', child: Text('Share Workout')),
               ],
             ),
           const _TimerAction(),
