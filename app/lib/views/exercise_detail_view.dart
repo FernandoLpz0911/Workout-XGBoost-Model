@@ -5,6 +5,7 @@ import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/utils/date_format.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
+import 'package:repiq/views/log_view.dart';
 import 'package:repiq/views/widgets/metric_chart.dart';
 import 'package:repiq/views/widgets/note_indicator.dart';
 
@@ -237,6 +238,40 @@ class _HistoryTab extends StatelessWidget {
                             ),
                             const SizedBox(width: 6),
                             NoteIndicator(comment: s.comment),
+                            const Spacer(),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.edit_outlined,
+                                size: 16,
+                                color: Colors.grey,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Edit',
+                              onPressed: () => showEditSetDialog(
+                                context,
+                                existingSet: s,
+                                onSave: (updated) => context
+                                    .read<LogViewModel>()
+                                    .updateHistorySet(s, updated),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            IconButton(
+                              icon: const Icon(
+                                Icons.delete_outline,
+                                size: 16,
+                                color: Colors.grey,
+                              ),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                              visualDensity: VisualDensity.compact,
+                              tooltip: 'Delete',
+                              onPressed: () => context
+                                  .read<LogViewModel>()
+                                  .deleteHistorySet(s),
+                            ),
                           ],
                         ),
                       );

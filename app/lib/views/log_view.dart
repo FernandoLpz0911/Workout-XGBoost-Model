@@ -832,6 +832,26 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
   }
 }
 
+/// Opens the edit-set dialog for an already-logged [existingSet], calling
+/// [onSave] with the updated set when confirmed. Used by History, Calendar,
+/// and the per-exercise detail view to correct past entries.
+Future<void> showEditSetDialog(
+  BuildContext context, {
+  required WorkoutSet existingSet,
+  required void Function(WorkoutSet) onSave,
+}) {
+  return showDialog<bool>(
+    context: context,
+    builder: (_) => _LogSetDialog(
+      exercise: existingSet.exercise,
+      category: existingSet.category,
+      recommendation: null,
+      existingSet: existingSet,
+      onSave: onSave,
+    ),
+  );
+}
+
 /// Dialog for editing an already-logged set. Supports strength, cardio, and
 /// passive exercise types.
 class _LogSetDialog extends StatefulWidget {
