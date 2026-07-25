@@ -65,7 +65,9 @@ class _ProgressViewState extends State<ProgressView> {
           );
         }
 
-        _selectedExercise ??= exercises.first;
+        if (_selectedExercise == null || !exercises.contains(_selectedExercise)) {
+          _selectedExercise = exercises.first;
+        }
 
         final data = _computeData(
           vm.history,

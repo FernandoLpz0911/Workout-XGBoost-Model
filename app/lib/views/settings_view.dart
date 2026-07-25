@@ -141,14 +141,18 @@ class SettingsView extends StatelessWidget {
   }
 
   Future<void> _importCsv(BuildContext context, LogViewModel vm) async {
-    final result = await FilePicker.pickFiles(
-      type: FileType.custom,
-      allowedExtensions: ['csv'],
-      withData: true,
-    );
-    if (result == null || result.files.first.bytes == null) return;
-    final csvText = utf8.decode(result.files.first.bytes!);
-    await vm.importCsvText(csvText);
+    try {
+      final result = await FilePicker.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['csv'],
+        withData: true,
+      );
+      if (result == null || result.files.first.bytes == null) return;
+      final csvText = utf8.decode(result.files.first.bytes!);
+      await vm.importCsvText(csvText);
+    } catch (e) {
+      vm.reportImportFailure('Import failed: $e');
+    }
   }
 
   void _confirmClear(BuildContext context, LogViewModel vm) {
