@@ -211,6 +211,20 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   static const _sessionOrderKey = 'session_order_v1';
   static const _sessionOrderDateKey = 'session_order_date_v1';
 
+  static const _plateauBreakerSeedKey = 'plateau_breaker_seed_applied_v1';
+
+  /// Exercises found to be chronically flat/declining across the user's
+  /// full training history (see docs/research/plateau-breaker-algorithm.md)
+  /// — seeded to [ProgressionAlgorithm.plateauBreaker] once, the first time
+  /// this runs, for whichever of these the user actually has logged.
+  static const _plateauBreakerCandidates = <String>{
+    'Dumbbell Curl',
+    'EZ-Bar Reverse Curl',
+    'EZ-Bar Preacher Curl',
+    'Cable Overhead Triceps Extension',
+    'Back Extension',
+  };
+
   LogViewModel() {
     WidgetsBinding.instance.addObserver(this);
     _initialize();
@@ -260,6 +274,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     await _loadHistory();
     await _loadTrainingModes();
     await _loadProgressionAlgorithms();
+    await _seedPlateauBreakerAlgorithmsIfNeeded();
     await _loadDayMetadata();
     _rebuildDict();
     _loadTodaySession();
@@ -299,6 +314,29 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _storage.saveProgressionAlgorithms(
       _progressionAlgorithms.map((k, v) => MapEntry(k, v.name)),
     );
+  }
+
+  /// One-time migration: assigns [ProgressionAlgorithm.plateauBreaker] to
+  /// any [_plateauBreakerCandidates] the user has actually logged, without
+  /// overriding an algorithm they've already chosen for that exercise.
+  /// Runs at most once per install (tracked via [_plateauBreakerSeedKey]),
+  /// so it never re-applies after the user changes their mind.
+  Future<void> _seedPlateauBreakerAlgorithmsIfNeeded() async {
+    final prefs = _prefs;
+    if (prefs == null || prefs.getBool(_plateauBreakerSeedKey) == true) {
+      return;
+    }
+    var changed = false;
+    final loggedExercises = history.map((s) => s.exercise).toSet();
+    for (final ex in _plateauBreakerCandidates) {
+      if (loggedExercises.contains(ex) &&
+          !_progressionAlgorithms.containsKey(ex)) {
+        _progressionAlgorithms[ex] = ProgressionAlgorithm.plateauBreaker;
+        changed = true;
+      }
+    }
+    if (changed) _saveProgressionAlgorithms();
+    await prefs.setBool(_plateauBreakerSeedKey, true);
   }
 
   Future<void> _loadDayMetadata() async {
