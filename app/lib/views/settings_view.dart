@@ -12,6 +12,11 @@ import 'package:repiq/viewmodels/log_viewmodel.dart';
 
 /// Settings screen with local data stats, appearance/theme picker, FitNotes
 /// CSV import, legal links, and a danger-zone clear action.
+///
+/// Every row shares one visual language — a colored circular icon avatar,
+/// title, optional subtitle, and a chevron or inline control — grouped into
+/// a handful of cards so it reads as one cohesive screen rather than a
+/// stack of differently-styled rows.
 class SettingsView extends StatelessWidget {
   const SettingsView({super.key});
 
@@ -23,15 +28,14 @@ class SettingsView extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
 
     return ListView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(20),
       children: [
-        _SectionHeader('Local Data'),
         Card(
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                Icon(Icons.storage, color: cs.secondary),
+                _IconAvatar(icon: Icons.storage_rounded, color: cs.secondary),
                 const SizedBox(width: 16),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -54,68 +58,62 @@ class SettingsView extends StatelessWidget {
           ),
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 28),
         _SectionHeader('Appearance'),
-        Card(
-          child: RadioGroup<AppThemeId>(
-            groupValue: themeController.themeId,
-            onChanged: (id) {
-              if (id != null) context.read<ThemeController>().setTheme(id);
-            },
-            child: Column(
-              children: [
-                for (final id in AppThemes.all) ...[
-                  if (id != AppThemes.all.first)
-                    const Divider(height: 1, indent: 16),
-                  _ThemeOptionTile(id: id),
+        _SettingsCard(
+          children: [
+            RadioGroup<AppThemeId>(
+              groupValue: themeController.themeId,
+              onChanged: (id) {
+                if (id != null) context.read<ThemeController>().setTheme(id);
+              },
+              child: Column(
+                children: [
+                  for (final id in AppThemes.all) _ThemeOptionTile(id: id),
                 ],
-              ],
+              ),
             ),
-          ),
-        ),
-
-        const SizedBox(height: 24),
-        _SectionHeader('Units'),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-            child: Row(
-              children: [
-                const Expanded(child: Text('Weight')),
-                SegmentedButton<WeightUnit>(
-                  segments: const [
-                    ButtonSegment(value: WeightUnit.lbs, label: Text('lbs')),
-                    ButtonSegment(value: WeightUnit.kg, label: Text('kg')),
-                  ],
-                  selected: {unitsController.unit},
-                  onSelectionChanged: (s) =>
-                      context.read<UnitsController>().setUnit(s.first),
-                ),
-              ],
+            _SettingsRow(
+              icon: Icons.scale_outlined,
+              iconColor: cs.secondary,
+              title: 'Weight Unit',
+              trailing: SegmentedButton<WeightUnit>(
+                segments: const [
+                  ButtonSegment(value: WeightUnit.lbs, label: Text('lbs')),
+                  ButtonSegment(value: WeightUnit.kg, label: Text('kg')),
+                ],
+                selected: {unitsController.unit},
+                onSelectionChanged: (s) =>
+                    context.read<UnitsController>().setUnit(s.first),
+              ),
             ),
-          ),
+          ],
         ),
 
-        const SizedBox(height: 24),
-        _SectionHeader('Body Tracker'),
-        _ActionTile(
-          icon: Icons.monitor_weight_outlined,
-          title: 'Body Tracker',
-          subtitle: 'Log and chart bodyweight and body fat % over time',
-          onTap: () => Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const BodyTrackerView()),
-          ),
-        ),
-
-        const SizedBox(height: 24),
-        _SectionHeader('Import'),
-        _ActionTile(
-          icon: Icons.upload_file,
-          title: 'Import FitNotes CSV',
-          subtitle: 'Merge an existing FitNotes export into your local history',
-          loading: vm.isImporting,
-          onTap: () => _importCsv(context, vm),
+        const SizedBox(height: 28),
+        _SectionHeader('Data'),
+        _SettingsCard(
+          children: [
+            _SettingsRow(
+              icon: Icons.monitor_weight_outlined,
+              iconColor: cs.secondary,
+              title: 'Body Tracker',
+              subtitle: 'Log and chart bodyweight and body fat % over time',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const BodyTrackerView()),
+              ),
+            ),
+            _SettingsRow(
+              icon: Icons.upload_file_rounded,
+              iconColor: cs.secondary,
+              title: 'Import FitNotes CSV',
+              subtitle:
+                  'Merge an existing FitNotes export into your local history',
+              loading: vm.isImporting,
+              onTap: () => _importCsv(context, vm),
+            ),
+          ],
         ),
 
         if (vm.lastActionMessage != null) ...[
@@ -134,7 +132,7 @@ class SettingsView extends StatelessWidget {
                   color: isError
                       ? errorColor.withValues(alpha: 0.15)
                       : Colors.green.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
                   children: [
@@ -161,37 +159,38 @@ class SettingsView extends StatelessWidget {
           ),
         ],
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 28),
         _SectionHeader('Legal'),
-        Card(
-          child: Column(
-            children: [
-              ListTile(
-                leading: Icon(Icons.privacy_tip_outlined, color: cs.secondary),
-                title: const Text('Privacy Policy'),
-                trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                onTap: () => LegalView.showPrivacy(context),
-              ),
-              const Divider(height: 1, indent: 16),
-              ListTile(
-                leading: Icon(Icons.gavel_outlined, color: cs.secondary),
-                title: const Text('Terms of Service'),
-                trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-                onTap: () => LegalView.showTerms(context),
-              ),
-            ],
-          ),
+        _SettingsCard(
+          children: [
+            _SettingsRow(
+              icon: Icons.privacy_tip_outlined,
+              iconColor: cs.secondary,
+              title: 'Privacy Policy',
+              onTap: () => LegalView.showPrivacy(context),
+            ),
+            _SettingsRow(
+              icon: Icons.gavel_outlined,
+              iconColor: cs.secondary,
+              title: 'Terms of Service',
+              onTap: () => LegalView.showTerms(context),
+            ),
+          ],
         ),
 
-        const SizedBox(height: 24),
+        const SizedBox(height: 28),
         _SectionHeader('Danger Zone'),
-        _ActionTile(
-          icon: Icons.delete_forever,
-          title: 'Clear All Local Data',
-          subtitle: 'Permanently deletes all locally stored sets',
-          iconColor: cs.error,
-          enabled: vm.localSetCount > 0,
-          onTap: () => _confirmClear(context, vm),
+        _SettingsCard(
+          children: [
+            _SettingsRow(
+              icon: Icons.delete_forever_rounded,
+              iconColor: cs.error,
+              title: 'Clear All Local Data',
+              subtitle: 'Permanently deletes all locally stored sets',
+              enabled: vm.localSetCount > 0,
+              onTap: () => _confirmClear(context, vm),
+            ),
+          ],
         ),
       ],
     );
@@ -248,7 +247,7 @@ class _SectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: 8, left: 4),
       child: Text(
         title.toUpperCase(),
         style: const TextStyle(
@@ -257,6 +256,46 @@ class _SectionHeader extends StatelessWidget {
           letterSpacing: 1.2,
           color: Colors.grey,
         ),
+      ),
+    );
+  }
+}
+
+/// A colored circular icon badge — the one recurring visual element every
+/// settings row uses, so the whole screen reads as a single system instead
+/// of a mix of bare icons and swatches.
+class _IconAvatar extends StatelessWidget {
+  final IconData icon;
+  final Color color;
+  const _IconAvatar({required this.icon, required this.color});
+
+  @override
+  Widget build(BuildContext context) {
+    return CircleAvatar(
+      radius: 20,
+      backgroundColor: color.withValues(alpha: 0.15),
+      child: Icon(icon, color: color, size: 20),
+    );
+  }
+}
+
+/// Card that lays out its [children] as rows separated by thin dividers,
+/// so every multi-row settings group looks identical regardless of what
+/// the rows contain.
+class _SettingsCard extends StatelessWidget {
+  final List<Widget> children;
+  const _SettingsCard({required this.children});
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Column(
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i != 0) const Divider(height: 1, indent: 72),
+            children[i],
+          ],
+        ],
       ),
     );
   }
@@ -277,57 +316,65 @@ class _ThemeOptionTile extends StatelessWidget {
       value: id,
       title: Text(theme.label),
       secondary: CircleAvatar(
-        radius: 16,
+        radius: 20,
         backgroundColor: themeColors.primary,
-        child: Icon(theme.icon, size: 16, color: Colors.white),
+        child: Icon(theme.icon, size: 20, color: Colors.white),
       ),
     );
   }
 }
 
-/// Tappable card row with an icon, title, subtitle, and optional loading spinner.
-class _ActionTile extends StatelessWidget {
+/// One row within a [_SettingsCard]: icon avatar, title, optional subtitle,
+/// and either a chevron (tappable navigation), a custom [trailing] control
+/// (e.g. the unit toggle), or a loading spinner in place of the icon.
+class _SettingsRow extends StatelessWidget {
   final IconData icon;
+  final Color iconColor;
   final String title;
-  final String subtitle;
+  final String? subtitle;
+  final Widget? trailing;
   final bool loading;
   final bool enabled;
-  final VoidCallback onTap;
-  final Color? iconColor;
+  final VoidCallback? onTap;
 
-  const _ActionTile({
+  const _SettingsRow({
     required this.icon,
+    required this.iconColor,
     required this.title,
-    required this.subtitle,
-    required this.onTap,
+    this.subtitle,
+    this.trailing,
     this.loading = false,
     this.enabled = true,
-    this.iconColor,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Card(
-      child: ListTile(
-        leading: loading
-            ? const SizedBox(
-                width: 24,
-                height: 24,
+    return ListTile(
+      leading: loading
+          ? const SizedBox(
+              width: 40,
+              height: 40,
+              child: Padding(
+                padding: EdgeInsets.all(8),
                 child: CircularProgressIndicator(strokeWidth: 2),
-              )
-            : Icon(
-                icon,
-                color: iconColor ?? Theme.of(context).colorScheme.secondary,
               ),
-        title: Text(title),
-        subtitle: Text(
-          subtitle,
-          style: const TextStyle(color: Colors.grey, fontSize: 12),
-        ),
-        trailing: const Icon(Icons.chevron_right, color: Colors.grey),
-        enabled: enabled && !loading,
-        onTap: onTap,
-      ),
+            )
+          : _IconAvatar(icon: icon, color: iconColor),
+      title: Text(title),
+      subtitle: subtitle == null
+          ? null
+          : Text(
+              subtitle!,
+              style: const TextStyle(color: Colors.grey, fontSize: 12),
+            ),
+      trailing:
+          trailing ??
+          (onTap == null
+              ? null
+              : const Icon(Icons.chevron_right, color: Colors.grey)),
+      enabled: enabled && !loading,
+      onTap: onTap == null || loading ? null : onTap,
     );
   }
 }
