@@ -92,8 +92,8 @@ class _OnboardingViewState extends State<OnboardingView> {
   @override
   Widget build(BuildContext context) {
     final isLast = _page == _pages.length - 1;
+    final primary = Theme.of(context).colorScheme.primary;
     return Scaffold(
-      backgroundColor: const Color(0xFF0E1117),
       body: SafeArea(
         child: Column(
           children: [
@@ -112,7 +112,11 @@ class _OnboardingViewState extends State<OnboardingView> {
                 itemBuilder: (_, i) => _pages[i],
               ),
             ),
-            _DotsIndicator(count: _pages.length, current: _page),
+            _DotsIndicator(
+              count: _pages.length,
+              current: _page,
+              color: primary,
+            ),
             const SizedBox(height: 24),
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 32),
@@ -122,7 +126,7 @@ class _OnboardingViewState extends State<OnboardingView> {
                 child: ElevatedButton(
                   onPressed: _next,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.redAccent,
+                    backgroundColor: primary,
                     foregroundColor: Colors.white,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
@@ -203,10 +207,18 @@ class _OnboardingPage extends StatelessWidget {
 class _DotsIndicator extends StatelessWidget {
   final int count;
   final int current;
-  const _DotsIndicator({required this.count, required this.current});
+  final Color color;
+  const _DotsIndicator({
+    required this.count,
+    required this.current,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final inactive = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.24);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(count, (i) {
@@ -217,7 +229,7 @@ class _DotsIndicator extends StatelessWidget {
           width: active ? 20 : 8,
           height: 8,
           decoration: BoxDecoration(
-            color: active ? Colors.redAccent : Colors.white24,
+            color: active ? color : inactive,
             borderRadius: BorderRadius.circular(4),
           ),
         );

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/services/local_recommendation_engine.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 
 /// Progress charts. Two scopes:
@@ -509,6 +510,8 @@ class _Chart extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    final palette = Theme.of(context).extension<AppPalette>()!;
     final values = data.map((p) => p.value).toList();
     final trend = _trendSpots(values);
     final allValues = [...values, ...trend.map((s) => s.y)];
@@ -529,7 +532,7 @@ class _Chart extends StatelessWidget {
           drawVerticalLine: false,
           horizontalInterval: (maxY - minY) / 4,
           getDrawingHorizontalLine: (_) =>
-              FlLine(color: Colors.white12, strokeWidth: 1),
+              FlLine(color: palette.chartGridLine, strokeWidth: 1),
         ),
         borderData: FlBorderData(show: false),
         titlesData: FlTitlesData(
@@ -570,7 +573,7 @@ class _Chart extends StatelessWidget {
         ),
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => const Color(0xFF1C1C26),
+            getTooltipColor: (_) => palette.raisedSurface,
             getTooltipItems: (spots) => spots.map((s) {
               if (s.barIndex != 0) return null;
               final i = s.x.toInt();
@@ -581,8 +584,8 @@ class _Chart extends StatelessWidget {
                 children: [
                   TextSpan(
                     text: tooltipValue(s.y),
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: cs.onSurface,
                       fontWeight: FontWeight.bold,
                       fontSize: 13,
                     ),
@@ -597,13 +600,13 @@ class _Chart extends StatelessWidget {
             spots: spots,
             isCurved: true,
             curveSmoothness: 0.3,
-            color: Colors.blueAccent,
+            color: cs.secondary,
             barWidth: 2.5,
             dotData: FlDotData(
               show: true,
               getDotPainter: (spot, _, __, ___) => FlDotCirclePainter(
                 radius: 3,
-                color: Colors.blueAccent,
+                color: cs.secondary,
                 strokeWidth: 0,
               ),
             ),
@@ -611,8 +614,8 @@ class _Chart extends StatelessWidget {
               show: true,
               gradient: LinearGradient(
                 colors: [
-                  Colors.blueAccent.withValues(alpha: 0.3),
-                  Colors.blueAccent.withValues(alpha: 0.0),
+                  cs.secondary.withValues(alpha: 0.3),
+                  cs.secondary.withValues(alpha: 0.0),
                 ],
                 begin: Alignment.topCenter,
                 end: Alignment.bottomCenter,
@@ -623,7 +626,7 @@ class _Chart extends StatelessWidget {
             LineChartBarData(
               spots: trend,
               isCurved: false,
-              color: Colors.redAccent,
+              color: cs.primary,
               barWidth: 1.5,
               dashArray: const [6, 4],
               dotData: const FlDotData(show: false),

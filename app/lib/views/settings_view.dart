@@ -2,17 +2,21 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
+import 'package:repiq/services/theme_controller.dart';
+import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/views/legal_view.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 
-/// Settings screen with local data stats, FitNotes CSV import, legal links,
-/// and a danger-zone clear action.
+/// Settings screen with local data stats, appearance/theme picker, FitNotes
+/// CSV import, legal links, and a danger-zone clear action.
 class SettingsView extends StatelessWidget {
   const SettingsView({super.key});
 
   @override
   Widget build(BuildContext context) {
     final vm = context.watch<LogViewModel>();
+    final themeController = context.watch<ThemeController>();
+    final cs = Theme.of(context).colorScheme;
 
     return ListView(
       padding: const EdgeInsets.all(24),
@@ -23,7 +27,7 @@ class SettingsView extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                const Icon(Icons.storage, color: Colors.blueAccent),
+                Icon(Icons.storage, color: cs.secondary),
                 const SizedBox(width: 16),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -41,6 +45,26 @@ class SettingsView extends StatelessWidget {
                     ),
                   ],
                 ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 24),
+        _SectionHeader('Appearance'),
+        Card(
+          child: RadioGroup<AppThemeId>(
+            groupValue: themeController.themeId,
+            onChanged: (id) {
+              if (id != null) context.read<ThemeController>().setTheme(id);
+            },
+            child: Column(
+              children: [
+                for (final id in AppThemes.all) ...[
+                  if (id != AppThemes.all.first)
+                    const Divider(height: 1, indent: 16),
+                  _ThemeOptionTile(id: id),
+                ],
               ],
             ),
           ),
@@ -65,11 +89,12 @@ class SettingsView extends StatelessWidget {
                   msg.contains('fail') ||
                   msg.contains('Error') ||
                   msg.contains('required');
+              final errorColor = Theme.of(context).colorScheme.error;
               return Container(
                 padding: const EdgeInsets.all(14),
                 decoration: BoxDecoration(
                   color: isError
-                      ? Colors.redAccent.withValues(alpha: 0.15)
+                      ? errorColor.withValues(alpha: 0.15)
                       : Colors.green.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -79,7 +104,7 @@ class SettingsView extends StatelessWidget {
                       isError
                           ? Icons.error_outline
                           : Icons.check_circle_outline,
-                      color: isError ? Colors.redAccent : Colors.green,
+                      color: isError ? errorColor : Colors.green,
                     ),
                     const SizedBox(width: 12),
                     Expanded(child: Text(msg)),
@@ -104,20 +129,14 @@ class SettingsView extends StatelessWidget {
           child: Column(
             children: [
               ListTile(
-                leading: const Icon(
-                  Icons.privacy_tip_outlined,
-                  color: Colors.blueAccent,
-                ),
+                leading: Icon(Icons.privacy_tip_outlined, color: cs.secondary),
                 title: const Text('Privacy Policy'),
                 trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                 onTap: () => LegalView.showPrivacy(context),
               ),
               const Divider(height: 1, indent: 16),
               ListTile(
-                leading: const Icon(
-                  Icons.gavel_outlined,
-                  color: Colors.blueAccent,
-                ),
+                leading: Icon(Icons.gavel_outlined, color: cs.secondary),
                 title: const Text('Terms of Service'),
                 trailing: const Icon(Icons.chevron_right, color: Colors.grey),
                 onTap: () => LegalView.showTerms(context),
@@ -132,7 +151,7 @@ class SettingsView extends StatelessWidget {
           icon: Icons.delete_forever,
           title: 'Clear All Local Data',
           subtitle: 'Permanently deletes all locally stored sets',
-          iconColor: Colors.redAccent,
+          iconColor: cs.error,
           enabled: vm.localSetCount > 0,
           onTap: () => _confirmClear(context, vm),
         ),
@@ -156,6 +175,7 @@ class SettingsView extends StatelessWidget {
   }
 
   void _confirmClear(BuildContext context, LogViewModel vm) {
+    final errorColor = Theme.of(context).colorScheme.error;
     showDialog<void>(
       context: context,
       builder: (_) => AlertDialog(
@@ -174,10 +194,7 @@ class SettingsView extends StatelessWidget {
               Navigator.pop(context);
               vm.clearLocalData();
             },
-            child: const Text(
-              'Delete',
-              style: TextStyle(color: Colors.redAccent),
-            ),
+            child: Text('Delete', style: TextStyle(color: errorColor)),
           ),
         ],
       ),
@@ -202,6 +219,29 @@ class _SectionHeader extends StatelessWidget {
           letterSpacing: 1.2,
           color: Colors.grey,
         ),
+      ),
+    );
+  }
+}
+
+/// One selectable row in the Appearance card — a color-swatch preview,
+/// theme name, and a radio indicating the active theme. Reads its
+/// selection state from the ancestor [RadioGroup].
+class _ThemeOptionTile extends StatelessWidget {
+  final AppThemeId id;
+  const _ThemeOptionTile({required this.id});
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = AppThemes.of(id);
+    final themeColors = theme.data.colorScheme;
+    return RadioListTile<AppThemeId>(
+      value: id,
+      title: Text(theme.label),
+      secondary: CircleAvatar(
+        radius: 16,
+        backgroundColor: themeColors.primary,
+        child: Icon(theme.icon, size: 16, color: Colors.white),
       ),
     );
   }
@@ -237,7 +277,10 @@ class _ActionTile extends StatelessWidget {
                 height: 24,
                 child: CircularProgressIndicator(strokeWidth: 2),
               )
-            : Icon(icon, color: iconColor ?? Colors.blueAccent),
+            : Icon(
+                icon,
+                color: iconColor ?? Theme.of(context).colorScheme.secondary,
+              ),
         title: Text(title),
         subtitle: Text(
           subtitle,

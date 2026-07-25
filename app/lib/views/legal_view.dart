@@ -20,13 +20,7 @@ class LegalView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0E1117),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF0E1117),
-        surfaceTintColor: Colors.transparent,
-        title: Text(title),
-        leading: const BackButton(),
-      ),
+      appBar: AppBar(title: Text(title), leading: const BackButton()),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 40),
         child: Text(
