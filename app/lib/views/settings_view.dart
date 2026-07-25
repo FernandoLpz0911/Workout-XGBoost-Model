@@ -4,6 +4,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/services/theme_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
+import 'package:repiq/views/body_tracker_view.dart';
 import 'package:repiq/views/legal_view.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 
@@ -67,6 +68,18 @@ class SettingsView extends StatelessWidget {
                 ],
               ],
             ),
+          ),
+        ),
+
+        const SizedBox(height: 24),
+        _SectionHeader('Body Tracker'),
+        _ActionTile(
+          icon: Icons.monitor_weight_outlined,
+          title: 'Body Tracker',
+          subtitle: 'Log and chart bodyweight and body fat % over time',
+          onTap: () => Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const BodyTrackerView()),
           ),
         ),
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/utils/date_format.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/widgets/metric_chart.dart';
 
@@ -188,8 +189,9 @@ class _ProgressViewState extends State<ProgressView> {
                   axisLabel: (v) => _metric == 'Volume'
                       ? '${(v / 1000).toStringAsFixed(1)}k'
                       : v.toStringAsFixed(0),
-                  bottomLabel: (d) => '${_mon(d.month)} ${d.day}',
-                  tooltipTitle: (d) => '${_mon(d.month)} ${d.day}, ${d.year}',
+                  bottomLabel: (d) => '${monthAbbrev(d.month)} ${d.day}',
+                  tooltipTitle: (d) =>
+                      '${monthAbbrev(d.month)} ${d.day}, ${d.year}',
                   tooltipValue: (v) => _metric == 'Volume'
                       ? '${v.toStringAsFixed(0)} lbs·reps'
                       : '${v.toStringAsFixed(1)} lbs',
@@ -262,13 +264,13 @@ class _ProgressViewState extends State<ProgressView> {
                   bottomLabel: (d) => _period == _Period.year
                       ? '${d.year}'
                       : _period == _Period.month
-                      ? '${_mon(d.month)} ${d.year}'
-                      : '${_mon(d.month)} ${d.day}',
+                      ? '${monthAbbrev(d.month)} ${d.year}'
+                      : '${monthAbbrev(d.month)} ${d.day}',
                   tooltipTitle: (d) => _period == _Period.year
                       ? '${d.year}'
                       : _period == _Period.month
-                      ? '${_mon(d.month)} ${d.year}'
-                      : '${_mon(d.month)} ${d.day}, ${d.year}',
+                      ? '${monthAbbrev(d.month)} ${d.year}'
+                      : '${monthAbbrev(d.month)} ${d.day}, ${d.year}',
                   tooltipValue: (v) => switch (_overviewMetric) {
                     _OverviewMetric.volume =>
                       '${v.toStringAsFixed(0)} lbs·reps',
@@ -374,21 +376,6 @@ class _ProgressViewState extends State<ProgressView> {
         return workouts;
     }
   }
-
-  static String _mon(int m) => [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ][m - 1];
 }
 
 /// Accumulates per-day (or per-bucket) totals for the Overview scope.

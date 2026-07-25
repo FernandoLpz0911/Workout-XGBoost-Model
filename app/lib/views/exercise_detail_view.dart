@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/utils/date_format.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/widgets/metric_chart.dart';
 import 'package:repiq/views/widgets/note_indicator.dart';
@@ -123,9 +124,9 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
                         axisLabel: (v) => _metric == 'Volume'
                             ? '${(v / 1000).toStringAsFixed(1)}k'
                             : v.toStringAsFixed(0),
-                        bottomLabel: (d) => '${_mon(d.month)} ${d.day}',
+                        bottomLabel: (d) => '${monthAbbrev(d.month)} ${d.day}',
                         tooltipTitle: (d) =>
-                            '${_mon(d.month)} ${d.day}, ${d.year}',
+                            '${monthAbbrev(d.month)} ${d.day}, ${d.year}',
                         tooltipValue: (v) => _metric == 'Volume'
                             ? '${v.toStringAsFixed(0)} lbs·reps'
                             : '${v.toStringAsFixed(1)} lbs',
@@ -137,21 +138,6 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
       },
     );
   }
-
-  static String _mon(int m) => [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ][m - 1];
 }
 
 class _GraphUnavailable extends StatelessWidget {
