@@ -516,6 +516,41 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _storage.updateSet(old, updated);
   }
 
+  /// Updates a previously logged set regardless of which day it belongs to.
+  /// Used by History, Calendar, and the per-exercise detail view's edit flow
+  /// to correct past entries (today's live session is kept in sync too, if
+  /// the edited set happens to belong to it).
+  void updateHistorySet(WorkoutSet old, WorkoutSet updated) {
+    final hi = history.indexOf(old);
+    if (hi != -1) history[hi] = updated;
+
+    for (final ex in session) {
+      final si = ex.sets.indexOf(old);
+      if (si != -1) {
+        ex.sets[si] = updated;
+        _applyRec(ex);
+        break;
+      }
+    }
+
+    _invalidateHistoryCache();
+    notifyListeners();
+    _storage.updateSet(old, updated);
+  }
+
+  /// Deletes a previously logged set regardless of which day it belongs to.
+  void deleteHistorySet(WorkoutSet set) {
+    history.remove(set);
+    for (final ex in session) {
+      if (ex.sets.remove(set)) break;
+    }
+
+    _invalidateHistoryCache();
+    localSetCount--;
+    notifyListeners();
+    _storage.deleteSet(set);
+  }
+
   void removeExercise(int index) {
     final sets = List<WorkoutSet>.from(session[index].sets);
     session.removeAt(index);
