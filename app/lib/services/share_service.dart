@@ -1,10 +1,15 @@
 import 'package:share_plus/share_plus.dart';
+import 'package:repiq/models/weight_unit.dart';
 import 'package:repiq/models/workout_set.dart';
 
 /// Formats one day's logged sets as shareable plain text and hands off to
 /// the OS share sheet.
 class ShareService {
-  static Future<void> shareDay(String dateLabel, List<WorkoutSet> sets) async {
+  static Future<void> shareDay(
+    String dateLabel,
+    List<WorkoutSet> sets, {
+    WeightUnit unit = WeightUnit.lbs,
+  }) async {
     final byExercise = <String, List<WorkoutSet>>{};
     for (final s in sets) {
       byExercise.putIfAbsent(s.exercise, () => []).add(s);
@@ -17,7 +22,7 @@ class ShareService {
       buf.writeln(entry.key);
       for (final s in entry.value) {
         final note = s.comment.isNotEmpty ? ' — "${s.comment}"' : '';
-        buf.writeln('${s.displayText}$note');
+        buf.writeln('${s.displayTextIn(unit)}$note');
       }
       buf.writeln();
     }

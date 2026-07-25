@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/rest_timer.dart';
+import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/widgets/day_metadata_dialogs.dart';
@@ -295,6 +296,7 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
         final ex = vm.session[widget.exerciseIndex];
         _maybeInit(ex);
         final type = exerciseTypeOf(ex.category);
+        final units = context.watch<UnitsController>();
 
         return Scaffold(
           appBar: AppBar(
@@ -326,7 +328,7 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
               _RecBanner(ex: ex),
               const SizedBox(height: 24),
               if (type == ExerciseType.strength)
-                ..._buildStrengthInputs()
+                ..._buildStrengthInputs(units)
               else if (type == ExerciseType.cardio)
                 ..._buildCardioInputs()
               else
@@ -387,19 +389,24 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
     );
   }
 
-  List<Widget> _buildStrengthInputs() => [
+  List<Widget> _buildStrengthInputs(UnitsController units) => [
     _StepperRow(
-      label: 'WEIGHT (lbs)',
-      value: _weight.toStringAsFixed(1),
-      onDecrement: () =>
-          setState(() => _weight = (_weight - 2.5).clamp(0, 9999)),
-      onIncrement: () => setState(() => _weight += 2.5),
+      label: 'WEIGHT (${units.label.toUpperCase()})',
+      value: units.toDisplay(_weight).toStringAsFixed(1),
+      onDecrement: () => setState(
+        () => _weight = units.toLbs(
+          (units.toDisplay(_weight) - units.step).clamp(0, 99999),
+        ),
+      ),
+      onIncrement: () => setState(
+        () => _weight = units.toLbs(units.toDisplay(_weight) + units.step),
+      ),
       onTap: () => _editValue(
         context,
-        label: 'Weight (lbs)',
-        initial: _weight.toStringAsFixed(1),
+        label: 'Weight (${units.label})',
+        initial: units.toDisplay(_weight).toStringAsFixed(1),
         isDecimal: true,
-        onConfirm: (v) => setState(() => _weight = v),
+        onConfirm: (v) => setState(() => _weight = units.toLbs(v)),
       ),
     ),
     const SizedBox(height: 20),
@@ -485,12 +492,14 @@ class _RecBanner extends StatelessWidget {
     }
     final rec = ex.recommendation;
     if (rec == null) return const SizedBox.shrink();
+    final units = context.watch<UnitsController>();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'Recommendation: ${rec.targetWeight.toStringAsFixed(1)} lbs × ${rec.targetReps} reps',
+          'Recommendation: ${units.toDisplay(rec.targetWeight).toStringAsFixed(1)} '
+          '${units.label} × ${rec.targetReps} reps',
           style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
         ),
         const SizedBox(height: 2),
@@ -560,6 +569,7 @@ class _SetRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final unit = context.watch<UnitsController>().unit;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
@@ -570,7 +580,7 @@ class _SetRow extends StatelessWidget {
           ),
           const SizedBox(width: 12),
           Text(
-            set.displayText,
+            set.displayTextIn(unit),
             style: const TextStyle(fontWeight: FontWeight.w600),
           ),
           const SizedBox(width: 4),
@@ -895,6 +905,7 @@ class _LogSetDialogState extends State<_LogSetDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final units = context.watch<UnitsController>();
     return AlertDialog(
       title: const Text('Edit Set'),
       contentPadding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
@@ -902,7 +913,7 @@ class _LogSetDialogState extends State<_LogSetDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            if (_type == ExerciseType.strength) ..._strengthFields(),
+            if (_type == ExerciseType.strength) ..._strengthFields(units),
             if (_type == ExerciseType.cardio) ..._cardioFields(),
             if (_type == ExerciseType.passive) ..._passiveFields(),
             const SizedBox(height: 16),
@@ -932,19 +943,24 @@ class _LogSetDialogState extends State<_LogSetDialog> {
     );
   }
 
-  List<Widget> _strengthFields() => [
+  List<Widget> _strengthFields(UnitsController units) => [
     _StepperRow(
-      label: 'WEIGHT (lbs)',
-      value: _weight.toStringAsFixed(1),
-      onDecrement: () =>
-          setState(() => _weight = (_weight - 2.5).clamp(0, 9999)),
-      onIncrement: () => setState(() => _weight += 2.5),
+      label: 'WEIGHT (${units.label.toUpperCase()})',
+      value: units.toDisplay(_weight).toStringAsFixed(1),
+      onDecrement: () => setState(
+        () => _weight = units.toLbs(
+          (units.toDisplay(_weight) - units.step).clamp(0, 99999),
+        ),
+      ),
+      onIncrement: () => setState(
+        () => _weight = units.toLbs(units.toDisplay(_weight) + units.step),
+      ),
       onTap: () => _editValue(
         context,
-        label: 'Weight (lbs)',
-        initial: _weight.toStringAsFixed(1),
+        label: 'Weight (${units.label})',
+        initial: units.toDisplay(_weight).toStringAsFixed(1),
         isDecimal: true,
-        onConfirm: (v) => setState(() => _weight = v),
+        onConfirm: (v) => setState(() => _weight = units.toLbs(v)),
       ),
     ),
     const SizedBox(height: 20),
