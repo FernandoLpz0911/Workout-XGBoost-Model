@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:repiq/models/day_metadata.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/local_recommendation_engine.dart';
@@ -108,6 +109,8 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   Map<String, TrainingMode> _trainingModes = {};
 
   Map<String, ProgressionAlgorithm> _progressionAlgorithms = {};
+
+  Map<String, DayMetadata> _dayMetadata = {};
 
   SharedPreferences? _prefs;
 
@@ -257,6 +260,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     await _loadHistory();
     await _loadTrainingModes();
     await _loadProgressionAlgorithms();
+    await _loadDayMetadata();
     _rebuildDict();
     _loadTodaySession();
     isDictLoading = false;
@@ -295,6 +299,26 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     _storage.saveProgressionAlgorithms(
       _progressionAlgorithms.map((k, v) => MapEntry(k, v.name)),
     );
+  }
+
+  Future<void> _loadDayMetadata() async {
+    final raw = await _storage.loadDayMetadata();
+    _dayMetadata = raw.map((k, v) => MapEntry(k, DayMetadata.fromJson(v)));
+  }
+
+  DayMetadata dayMetadataFor(String dateKey) =>
+      _dayMetadata[dateKey] ?? const DayMetadata();
+
+  void setDayMetadata(String dateKey, DayMetadata meta) {
+    if (meta.isEmpty) {
+      _dayMetadata.remove(dateKey);
+    } else {
+      _dayMetadata[dateKey] = meta;
+    }
+    _storage.saveDayMetadata(
+      _dayMetadata.map((k, v) => MapEntry(k, v.toJson())),
+    );
+    notifyListeners();
   }
 
   void _rebuildDict() {
@@ -574,6 +598,10 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     super.dispose();
   }
 
-  static String _fmtDate(DateTime d) =>
+  static String _fmtDate(DateTime d) => fmtDate(d);
+
+  /// "yyyy-MM-dd" key used throughout the app for [historyByDate] and
+  /// [dayMetadataFor] lookups.
+  static String fmtDate(DateTime d) =>
       '${d.year}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
 }

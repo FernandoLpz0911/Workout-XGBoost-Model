@@ -11,6 +11,7 @@ import 'package:repiq/views/log_view.dart';
 import 'package:repiq/views/onboarding_view.dart';
 import 'package:repiq/views/progress_view.dart';
 import 'package:repiq/views/settings_view.dart';
+import 'package:repiq/views/widgets/day_metadata_dialogs.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -137,6 +138,23 @@ class _AppShellState extends State<_AppShell> {
                 context,
                 MaterialPageRoute(builder: (_) => const CalendarView()),
               ),
+            ),
+          if (_index == 0)
+            PopupMenuButton<String>(
+              icon: const Icon(Icons.more_vert),
+              onSelected: (value) {
+                final vm = context.read<LogViewModel>();
+                final today = LogViewModel.fmtDate(DateTime.now());
+                if (value == 'comment') {
+                  showWorkoutCommentDialog(context, vm, today);
+                } else if (value == 'time') {
+                  showWorkoutTimeDialog(context, vm, today);
+                }
+              },
+              itemBuilder: (_) => const [
+                PopupMenuItem(value: 'comment', child: Text('Workout Comment')),
+                PopupMenuItem(value: 'time', child: Text('Workout Time')),
+              ],
             ),
           const _TimerAction(),
           const SizedBox(width: 8),
