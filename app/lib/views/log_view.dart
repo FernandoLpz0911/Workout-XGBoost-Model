@@ -604,6 +604,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
   String? _category;
   String? _exercise;
   bool _customMode = false;
+  ProgressionAlgorithm _algorithm = ProgressionAlgorithm.standard;
   final _catCtrl = TextEditingController();
   final _exCtrl = TextEditingController();
 
@@ -616,7 +617,10 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
     if (_hasHistory) {
       _category = widget.vm.allCategories.first;
       final exs = widget.vm.exercisesFor(_category!);
-      if (exs.isNotEmpty) _exercise = exs.first;
+      if (exs.isNotEmpty) {
+        _exercise = exs.first;
+        _algorithm = widget.vm.progressionAlgorithmFor(_exercise!);
+      }
     }
   }
 
@@ -640,30 +644,38 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isStrength =
+        exerciseTypeOf(_resolvedCategory ?? '') == ExerciseType.strength;
     return AlertDialog(
       title: const Text('Add Exercise'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (_customMode) _buildCustomFields() else _buildDropdowns(),
-          const SizedBox(height: 4),
-          Align(
-            alignment: Alignment.centerLeft,
-            child: TextButton(
-              onPressed: () => setState(() {
-                _customMode = !_customMode;
-                if (_customMode) {
-                  _catCtrl.text = _category ?? '';
-                  _exCtrl.text = _exercise ?? '';
-                }
-              }),
-              child: Text(
-                _customMode ? 'Pick from history' : 'Enter custom exercise',
-                style: const TextStyle(fontSize: 12),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (_customMode) _buildCustomFields() else _buildDropdowns(),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: () => setState(() {
+                  _customMode = !_customMode;
+                  if (_customMode) {
+                    _catCtrl.text = _category ?? '';
+                    _exCtrl.text = _exercise ?? '';
+                  }
+                }),
+                child: Text(
+                  _customMode ? 'Pick from history' : 'Enter custom exercise',
+                  style: const TextStyle(fontSize: 12),
+                ),
               ),
             ),
-          ),
-        ],
+            if (isStrength) ...[
+              const SizedBox(height: 12),
+              _buildAlgorithmPicker(),
+            ],
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -674,10 +686,62 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
           onPressed: _canAdd
               ? () {
                   Navigator.pop(context);
-                  widget.vm.addExercise(_resolvedCategory!, _resolvedExercise!);
+                  widget.vm.addExercise(
+                    _resolvedCategory!,
+                    _resolvedExercise!,
+                    algorithm: isStrength
+                        ? _algorithm
+                        : ProgressionAlgorithm.standard,
+                  );
                 }
               : null,
           child: const Text('Add'),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildAlgorithmPicker() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Align(
+          alignment: Alignment.centerLeft,
+          child: Text(
+            'PROGRESSION STYLE',
+            style: TextStyle(
+              fontSize: 11,
+              letterSpacing: 0.8,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        SegmentedButton<ProgressionAlgorithm>(
+          segments: const [
+            ButtonSegment(
+              value: ProgressionAlgorithm.standard,
+              label: Text('Standard'),
+            ),
+            ButtonSegment(
+              value: ProgressionAlgorithm.plateauBreaker,
+              label: Text('Plateau Breaker'),
+            ),
+          ],
+          selected: {_algorithm},
+          onSelectionChanged: (s) => setState(() => _algorithm = s.first),
+          style: const ButtonStyle(
+            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            visualDensity: VisualDensity(horizontal: -2, vertical: -2),
+          ),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          _algorithm == ProgressionAlgorithm.plateauBreaker
+              ? 'For exercises that stall for you — cycles intensity in waves instead of a straight line up.'
+              : 'Add weight when you hit the rep target, hold and build reps otherwise.',
+          style: const TextStyle(fontSize: 11, color: Colors.grey),
         ),
       ],
     );
@@ -702,6 +766,7 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
             _category = val;
             final exs = widget.vm.exercisesFor(val ?? '');
             _exercise = exs.isNotEmpty ? exs.first : null;
+            _algorithm = widget.vm.progressionAlgorithmFor(_exercise ?? '');
           }),
         ),
         const SizedBox(height: 12),
@@ -712,7 +777,10 @@ class _AddExerciseDialogState extends State<_AddExerciseDialog> {
           items: exercises
               .map((e) => DropdownMenuItem(value: e, child: Text(e)))
               .toList(),
-          onChanged: (val) => setState(() => _exercise = val),
+          onChanged: (val) => setState(() {
+            _exercise = val;
+            _algorithm = widget.vm.progressionAlgorithmFor(val ?? '');
+          }),
         ),
       ],
     );

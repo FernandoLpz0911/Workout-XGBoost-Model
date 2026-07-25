@@ -10,6 +10,19 @@ enum TrainingMode {
   strength,
 }
 
+/// Which recommendation strategy [LocalRecommendationEngine] applies to a
+/// strength exercise. Chosen once when the exercise is added, since it's a
+/// property of how that lift tends to respond, not of a single session.
+enum ProgressionAlgorithm {
+  /// The default linear-progression algorithm: add weight on graduation,
+  /// hold and build reps otherwise, with plateau/safety overrides.
+  standard,
+
+  /// For exercises the user has flagged as chronically slow-progressing —
+  /// cycles intensity instead of chasing a straight line up.
+  plateauBreaker,
+}
+
 /// AI-generated recommendation for a single exercise session.
 class Recommendation {
   /// Suggested number of reps per set.

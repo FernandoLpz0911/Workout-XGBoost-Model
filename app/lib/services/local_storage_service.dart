@@ -18,6 +18,7 @@ import 'package:repiq/models/workout_set.dart';
 /// removed.
 class LocalStorageService {
   static const _modesKey = 'training_modes_v1';
+  static const _algorithmsKey = 'progression_algorithms_v1';
   static const _migratedKey = 'sqflite_migrated_v1';
 
   LocalStorageService({String? dbPath}) : _dbPath = dbPath;
@@ -205,6 +206,18 @@ class LocalStorageService {
   Future<void> saveTrainingModes(Map<String, String> modes) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_modesKey, jsonEncode(modes));
+  }
+
+  Future<Map<String, String>> loadProgressionAlgorithms() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_algorithmsKey);
+    if (raw == null || raw.isEmpty) return {};
+    return (jsonDecode(raw) as Map<String, dynamic>).cast<String, String>();
+  }
+
+  Future<void> saveProgressionAlgorithms(Map<String, String> algorithms) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_algorithmsKey, jsonEncode(algorithms));
   }
 
   /// Day-level fingerprint used as the SQLite PRIMARY KEY and Firestore doc ID.
