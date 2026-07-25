@@ -133,6 +133,7 @@ class _AppShellState extends State<_AppShell> {
       appBar: AppBar(
         title: Text(_titles[_index]),
         actions: [
+          const _TimerAction(),
           if (_index == 2)
             IconButton(
               icon: const Icon(Icons.calendar_month_outlined),
@@ -166,7 +167,6 @@ class _AppShellState extends State<_AppShell> {
                 PopupMenuItem(value: 'share', child: Text('Share Workout')),
               ],
             ),
-          const _TimerAction(),
           const SizedBox(width: 8),
         ],
       ),
