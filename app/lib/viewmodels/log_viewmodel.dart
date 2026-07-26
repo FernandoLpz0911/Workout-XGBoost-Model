@@ -100,6 +100,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   bool isHistoryLoading = false;
 
   bool isImporting = false;
+  bool isExporting = false;
   bool isDeleting = false;
 
   String? lastActionMessage;
@@ -639,6 +640,23 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
       lastActionMessage = 'Import failed: $e';
     } finally {
       isImporting = false;
+      notifyListeners();
+    }
+  }
+
+  /// Builds the full FitNotes-compatible CSV export, or null (with
+  /// [lastActionMessage] set) if it fails.
+  Future<Uint8List?> exportCsvBytes() async {
+    isExporting = true;
+    lastActionMessage = null;
+    notifyListeners();
+    try {
+      return await _storage.exportAsCsvBytes();
+    } catch (e) {
+      lastActionMessage = 'Export failed: $e';
+      return null;
+    } finally {
+      isExporting = false;
       notifyListeners();
     }
   }
