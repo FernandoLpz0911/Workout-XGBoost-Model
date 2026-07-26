@@ -73,112 +73,142 @@ class _CalendarViewState extends State<CalendarView> {
               const SizedBox(width: 8),
             ],
           ),
-          body: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: Row(
-                  children: _weekdayLabels
-                      .map(
-                        (w) => Expanded(
-                          child: Center(
-                            child: Text(
-                              w,
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                ),
-              ),
-              Expanded(
-                child: GridView.builder(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 7,
-                  ),
-                  itemCount: leadingBlanks + daysInMonth,
-                  itemBuilder: (context, i) {
-                    if (i < leadingBlanks) return const SizedBox.shrink();
-                    final day = i - leadingBlanks + 1;
-                    final date = DateTime(_month.year, _month.month, day);
-                    final key = WorkoutSet.fmtDateStatic(date);
-                    final sets = byDate[key];
-                    final isToday =
-                        date.year == today.year &&
-                        date.month == today.month &&
-                        date.day == today.day;
-                    final categories = sets == null
-                        ? const <String>[]
-                        : sets.map((s) => s.category).toSet().take(3).toList();
-
-                    return InkWell(
-                      onTap: sets == null
-                          ? null
-                          : () => _showPreview(context, key, sets),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Container(
-                            width: 28,
-                            height: 28,
-                            alignment: Alignment.center,
-                            decoration: isToday
-                                ? BoxDecoration(
-                                    color: cs.primary,
-                                    shape: BoxShape.circle,
-                                  )
-                                : null,
-                            child: Text(
-                              '$day',
-                              style: TextStyle(
-                                color: isToday ? Colors.white : null,
-                                fontWeight: isToday
-                                    ? FontWeight.bold
-                                    : FontWeight.normal,
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 3),
-                          SizedBox(
-                            height: 6,
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                for (var c = 0; c < categories.length; c++)
-                                  Container(
-                                    width: 5,
-                                    height: 5,
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 1,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: dotColors[c % dotColors.length],
-                                      shape: BoxShape.circle,
+          body: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              children: [
+                Expanded(
+                  child: Card(
+                    child: Column(
+                      children: [
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(8, 16, 8, 8),
+                          child: Row(
+                            children: _weekdayLabels
+                                .map(
+                                  (w) => Expanded(
+                                    child: Center(
+                                      child: Text(
+                                        w,
+                                        style: const TextStyle(
+                                          color: Colors.grey,
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
                                     ),
                                   ),
-                              ],
-                            ),
+                                )
+                                .toList(),
                           ),
-                        ],
-                      ),
-                    );
-                  },
+                        ),
+                        Expanded(
+                          child: GridView.builder(
+                            padding: const EdgeInsets.symmetric(horizontal: 8),
+                            gridDelegate:
+                                const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 7,
+                                ),
+                            itemCount: leadingBlanks + daysInMonth,
+                            itemBuilder: (context, i) {
+                              if (i < leadingBlanks) {
+                                return const SizedBox.shrink();
+                              }
+                              final day = i - leadingBlanks + 1;
+                              final date = DateTime(
+                                _month.year,
+                                _month.month,
+                                day,
+                              );
+                              final key = WorkoutSet.fmtDateStatic(date);
+                              final sets = byDate[key];
+                              final isToday =
+                                  date.year == today.year &&
+                                  date.month == today.month &&
+                                  date.day == today.day;
+                              final categories = sets == null
+                                  ? const <String>[]
+                                  : sets
+                                        .map((s) => s.category)
+                                        .toSet()
+                                        .take(3)
+                                        .toList();
+
+                              return InkWell(
+                                onTap: sets == null
+                                    ? null
+                                    : () => _showPreview(context, key, sets),
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Container(
+                                      width: 28,
+                                      height: 28,
+                                      alignment: Alignment.center,
+                                      decoration: isToday
+                                          ? BoxDecoration(
+                                              color: cs.primary,
+                                              shape: BoxShape.circle,
+                                            )
+                                          : null,
+                                      child: Text(
+                                        '$day',
+                                        style: TextStyle(
+                                          color: isToday ? Colors.white : null,
+                                          fontWeight: isToday
+                                              ? FontWeight.bold
+                                              : FontWeight.normal,
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    SizedBox(
+                                      height: 6,
+                                      child: Row(
+                                        mainAxisAlignment:
+                                            MainAxisAlignment.center,
+                                        children: [
+                                          for (
+                                            var c = 0;
+                                            c < categories.length;
+                                            c++
+                                          )
+                                            Container(
+                                              width: 5,
+                                              height: 5,
+                                              margin:
+                                                  const EdgeInsets.symmetric(
+                                                    horizontal: 1,
+                                                  ),
+                                              decoration: BoxDecoration(
+                                                color:
+                                                    dotColors[c %
+                                                        dotColors.length],
+                                                shape: BoxShape.circle,
+                                              ),
+                                            ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              );
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Text(
-                  '${byDate.length} workout day${byDate.length == 1 ? '' : 's'} total',
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Text(
+                    '${byDate.length} workout day${byDate.length == 1 ? '' : 's'} total',
+                    style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
       },

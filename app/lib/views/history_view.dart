@@ -5,6 +5,7 @@ import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/exercise_detail_view.dart';
 import 'package:repiq/views/log_view.dart';
+import 'package:repiq/views/widgets/app_card.dart';
 import 'package:repiq/views/widgets/note_indicator.dart';
 
 /// Displays the full workout history grouped by date, then by exercise.
@@ -23,7 +24,7 @@ class HistoryView extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(Icons.history, size: 64, color: Colors.grey),
+                IconAvatar(icon: Icons.history, color: Colors.grey, radius: 40),
                 SizedBox(height: 16),
                 Text(
                   'No workout history yet.',
@@ -68,13 +69,31 @@ class _DayCard extends StatelessWidget {
     for (final s in sets) {
       byExercise.putIfAbsent(s.exercise, () => []).add(s);
     }
+    final cs = Theme.of(context).colorScheme;
+    final dotColors = [cs.primary, cs.secondary, cs.tertiary];
+    final categories = sets.map((s) => s.category).toSet().take(3).toList();
 
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       child: ExpansionTile(
-        title: Text(
-          date,
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+        title: Row(
+          children: [
+            Text(
+              date,
+              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+            ),
+            const SizedBox(width: 8),
+            for (var c = 0; c < categories.length; c++)
+              Container(
+                width: 7,
+                height: 7,
+                margin: const EdgeInsets.only(right: 4),
+                decoration: BoxDecoration(
+                  color: dotColors[c % dotColors.length],
+                  shape: BoxShape.circle,
+                ),
+              ),
+          ],
         ),
         subtitle: Text(
           '${byExercise.length} exercise${byExercise.length == 1 ? '' : 's'}'

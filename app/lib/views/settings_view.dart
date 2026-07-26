@@ -9,6 +9,7 @@ import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/views/body_tracker_view.dart';
 import 'package:repiq/views/legal_view.dart';
+import 'package:repiq/views/widgets/app_card.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 
 /// Settings screen with local data stats, appearance/theme picker, FitNotes
@@ -36,7 +37,7 @@ class SettingsView extends StatelessWidget {
             padding: const EdgeInsets.all(20),
             child: Row(
               children: [
-                _IconAvatar(icon: Icons.storage_rounded, color: cs.secondary),
+                IconAvatar(icon: Icons.storage_rounded, color: cs.secondary),
                 const SizedBox(width: 16),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -60,8 +61,8 @@ class SettingsView extends StatelessWidget {
         ),
 
         const SizedBox(height: 28),
-        _SectionHeader('Appearance'),
-        _SettingsCard(
+        SectionHeader('Appearance'),
+        GroupedCard(
           children: [
             RadioGroup<AppThemeId>(
               groupValue: themeController.themeId,
@@ -74,7 +75,7 @@ class SettingsView extends StatelessWidget {
                 ],
               ),
             ),
-            _SettingsRow(
+            AppListRow(
               icon: Icons.scale_outlined,
               iconColor: cs.secondary,
               title: 'Weight Unit',
@@ -92,10 +93,10 @@ class SettingsView extends StatelessWidget {
         ),
 
         const SizedBox(height: 28),
-        _SectionHeader('Data'),
-        _SettingsCard(
+        SectionHeader('Data'),
+        GroupedCard(
           children: [
-            _SettingsRow(
+            AppListRow(
               icon: Icons.monitor_weight_outlined,
               iconColor: cs.secondary,
               title: 'Body Tracker',
@@ -105,7 +106,7 @@ class SettingsView extends StatelessWidget {
                 MaterialPageRoute(builder: (_) => const BodyTrackerView()),
               ),
             ),
-            _SettingsRow(
+            AppListRow(
               icon: Icons.upload_file_rounded,
               iconColor: cs.secondary,
               title: 'Import FitNotes CSV',
@@ -114,7 +115,7 @@ class SettingsView extends StatelessWidget {
               loading: vm.isImporting,
               onTap: () => _importCsv(context, vm),
             ),
-            _SettingsRow(
+            AppListRow(
               icon: Icons.download_rounded,
               iconColor: cs.secondary,
               title: 'Export Workout CSV',
@@ -170,16 +171,16 @@ class SettingsView extends StatelessWidget {
         ],
 
         const SizedBox(height: 28),
-        _SectionHeader('Legal'),
-        _SettingsCard(
+        SectionHeader('Legal'),
+        GroupedCard(
           children: [
-            _SettingsRow(
+            AppListRow(
               icon: Icons.privacy_tip_outlined,
               iconColor: cs.secondary,
               title: 'Privacy Policy',
               onTap: () => LegalView.showPrivacy(context),
             ),
-            _SettingsRow(
+            AppListRow(
               icon: Icons.gavel_outlined,
               iconColor: cs.secondary,
               title: 'Terms of Service',
@@ -189,10 +190,10 @@ class SettingsView extends StatelessWidget {
         ),
 
         const SizedBox(height: 28),
-        _SectionHeader('Danger Zone'),
-        _SettingsCard(
+        SectionHeader('Danger Zone'),
+        GroupedCard(
           children: [
-            _SettingsRow(
+            AppListRow(
               icon: Icons.delete_forever_rounded,
               iconColor: cs.error,
               title: 'Clear All Local Data',
@@ -259,68 +260,6 @@ class SettingsView extends StatelessWidget {
   }
 }
 
-/// Uppercase section label used between card groups.
-class _SectionHeader extends StatelessWidget {
-  final String title;
-  const _SectionHeader(this.title);
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8, left: 4),
-      child: Text(
-        title.toUpperCase(),
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.2,
-          color: Colors.grey,
-        ),
-      ),
-    );
-  }
-}
-
-/// A colored circular icon badge — the one recurring visual element every
-/// settings row uses, so the whole screen reads as a single system instead
-/// of a mix of bare icons and swatches.
-class _IconAvatar extends StatelessWidget {
-  final IconData icon;
-  final Color color;
-  const _IconAvatar({required this.icon, required this.color});
-
-  @override
-  Widget build(BuildContext context) {
-    return CircleAvatar(
-      radius: 20,
-      backgroundColor: color.withValues(alpha: 0.15),
-      child: Icon(icon, color: color, size: 20),
-    );
-  }
-}
-
-/// Card that lays out its [children] as rows separated by thin dividers,
-/// so every multi-row settings group looks identical regardless of what
-/// the rows contain.
-class _SettingsCard extends StatelessWidget {
-  final List<Widget> children;
-  const _SettingsCard({required this.children});
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Column(
-        children: [
-          for (var i = 0; i < children.length; i++) ...[
-            if (i != 0) const Divider(height: 1, indent: 72),
-            children[i],
-          ],
-        ],
-      ),
-    );
-  }
-}
-
 /// One selectable row in the Appearance card — a color-swatch preview,
 /// theme name, and a radio indicating the active theme. Reads its
 /// selection state from the ancestor [RadioGroup].
@@ -340,61 +279,6 @@ class _ThemeOptionTile extends StatelessWidget {
         backgroundColor: themeColors.primary,
         child: Icon(theme.icon, size: 20, color: Colors.white),
       ),
-    );
-  }
-}
-
-/// One row within a [_SettingsCard]: icon avatar, title, optional subtitle,
-/// and either a chevron (tappable navigation), a custom [trailing] control
-/// (e.g. the unit toggle), or a loading spinner in place of the icon.
-class _SettingsRow extends StatelessWidget {
-  final IconData icon;
-  final Color iconColor;
-  final String title;
-  final String? subtitle;
-  final Widget? trailing;
-  final bool loading;
-  final bool enabled;
-  final VoidCallback? onTap;
-
-  const _SettingsRow({
-    required this.icon,
-    required this.iconColor,
-    required this.title,
-    this.subtitle,
-    this.trailing,
-    this.loading = false,
-    this.enabled = true,
-    this.onTap,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return ListTile(
-      leading: loading
-          ? const SizedBox(
-              width: 40,
-              height: 40,
-              child: Padding(
-                padding: EdgeInsets.all(8),
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          : _IconAvatar(icon: icon, color: iconColor),
-      title: Text(title),
-      subtitle: subtitle == null
-          ? null
-          : Text(
-              subtitle!,
-              style: const TextStyle(color: Colors.grey, fontSize: 12),
-            ),
-      trailing:
-          trailing ??
-          (onTap == null
-              ? null
-              : const Icon(Icons.chevron_right, color: Colors.grey)),
-      enabled: enabled && !loading,
-      onTap: onTap == null || loading ? null : onTap,
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:repiq/services/rest_timer.dart';
 import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
+import 'package:repiq/views/widgets/app_card.dart';
 import 'package:repiq/views/widgets/day_metadata_dialogs.dart';
 import 'package:repiq/views/widgets/note_indicator.dart';
 
@@ -38,46 +39,52 @@ class LogView extends StatelessWidget {
                         onAdd: () => _showAddExercise(context, vm),
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
                         itemCount: vm.session.length,
                         itemBuilder: (context, i) {
                           final ex = vm.session[i];
                           final setCount = ex.sets.length;
-                          return ListTile(
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 4,
-                            ),
-                            title: Text(
-                              ex.exercise,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
+                          final cs = Theme.of(context).colorScheme;
+                          return Card(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            child: ListTile(
+                              leading: IconAvatar(
+                                icon: _exerciseIcon(
+                                  exerciseTypeOf(ex.category),
+                                ),
+                                color: cs.secondary,
                               ),
-                            ),
-                            subtitle: Text(
-                              setCount == 0
-                                  ? ex.category
-                                  : '${ex.category}  ·  $setCount ${setCount == 1 ? "set" : "sets"}',
-                              style: const TextStyle(
-                                color: Colors.grey,
-                                fontSize: 12,
+                              title: Text(
+                                ex.exercise,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 16,
+                                ),
                               ),
-                            ),
-                            trailing: IconButton(
-                              icon: const Icon(
-                                Icons.close,
-                                color: Colors.grey,
-                                size: 20,
+                              subtitle: Text(
+                                setCount == 0
+                                    ? ex.category
+                                    : '${ex.category}  ·  $setCount ${setCount == 1 ? "set" : "sets"}',
+                                style: const TextStyle(
+                                  color: Colors.grey,
+                                  fontSize: 12,
+                                ),
                               ),
-                              tooltip: 'Remove exercise',
-                              onPressed: () => _confirmRemove(context, vm, i),
-                            ),
-                            onTap: () => Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    _ExerciseDetailPage(exerciseIndex: i),
+                              trailing: IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.grey,
+                                  size: 20,
+                                ),
+                                tooltip: 'Remove exercise',
+                                onPressed: () => _confirmRemove(context, vm, i),
+                              ),
+                              onTap: () => Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) =>
+                                      _ExerciseDetailPage(exerciseIndex: i),
+                                ),
                               ),
                             ),
                           );
@@ -105,6 +112,12 @@ class LogView extends StatelessWidget {
       builder: (_) => _AddExerciseDialog(vm: vm),
     );
   }
+
+  static IconData _exerciseIcon(ExerciseType type) => switch (type) {
+    ExerciseType.strength => Icons.fitness_center,
+    ExerciseType.cardio => Icons.directions_run,
+    ExerciseType.passive => Icons.self_improvement,
+  };
 
   static void _confirmRemove(BuildContext context, LogViewModel vm, int index) {
     final errorColor = Theme.of(context).colorScheme.error;
@@ -151,7 +164,11 @@ class _EmptySessionView extends StatelessWidget {
             style: const TextStyle(fontSize: 18, color: Colors.grey),
           ),
           const SizedBox(height: 20),
-          const Icon(Icons.fitness_center, size: 64, color: Colors.grey),
+          IconAvatar(
+            icon: Icons.fitness_center,
+            color: Colors.grey,
+            radius: 40,
+          ),
           const SizedBox(height: 16),
           const Text(
             'No exercises yet',
@@ -316,7 +333,7 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
             ),
           ),
           body: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
             children: [
               if (type == ExerciseType.strength) ...[
                 _TrainingModeToggle(
@@ -326,22 +343,31 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
                 const SizedBox(height: 16),
               ],
               _RecBanner(ex: ex),
-              const SizedBox(height: 24),
-              if (type == ExerciseType.strength)
-                ..._buildStrengthInputs(units)
-              else if (type == ExerciseType.cardio)
-                ..._buildCardioInputs()
-              else
-                ..._buildPassiveInputs(),
               const SizedBox(height: 16),
-              TextField(
-                controller: _noteCtrl,
-                decoration: const InputDecoration(
-                  labelText: 'Note (optional)',
-                  hintText: 'e.g. "forearms tired"',
-                  isDense: true,
+              Card(
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    children: [
+                      if (type == ExerciseType.strength)
+                        ..._buildStrengthInputs(units)
+                      else if (type == ExerciseType.cardio)
+                        ..._buildCardioInputs()
+                      else
+                        ..._buildPassiveInputs(),
+                      const SizedBox(height: 20),
+                      TextField(
+                        controller: _noteCtrl,
+                        decoration: const InputDecoration(
+                          labelText: 'Note (optional)',
+                          hintText: 'e.g. "forearms tired"',
+                          isDense: true,
+                        ),
+                        maxLines: 2,
+                      ),
+                    ],
+                  ),
                 ),
-                maxLines: 2,
               ),
               const SizedBox(height: 20),
               SizedBox(
@@ -371,14 +397,26 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
               ),
               if (ex.sets.isNotEmpty) ...[
                 const SizedBox(height: 28),
-                const Divider(),
-                const SizedBox(height: 4),
-                ...ex.sets.asMap().entries.map(
-                  (e) => _SetRow(
-                    setNum: e.key + 1,
-                    set: e.value,
-                    onEdit: () => _showEditSet(context, e.key, ex, vm),
-                    onDelete: () => vm.removeSet(widget.exerciseIndex, e.key),
+                const SectionHeader('Logged Today'),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+                    child: Column(
+                      children: ex.sets
+                          .asMap()
+                          .entries
+                          .map(
+                            (e) => _SetRow(
+                              setNum: e.key + 1,
+                              set: e.value,
+                              onEdit: () =>
+                                  _showEditSet(context, e.key, ex, vm),
+                              onDelete: () =>
+                                  vm.removeSet(widget.exerciseIndex, e.key),
+                            ),
+                          )
+                          .toList(),
+                    ),
                   ),
                 ),
               ],
