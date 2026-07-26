@@ -5,6 +5,7 @@ import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/utils/date_format.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
+import 'package:repiq/views/widgets/app_card.dart';
 import 'package:repiq/views/widgets/metric_chart.dart';
 
 /// Progress charts. Two scopes:
@@ -149,59 +150,74 @@ class _ProgressViewState extends State<ProgressView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        DropdownButtonFormField<String>(
-          decoration: const InputDecoration(labelText: 'Category'),
-          initialValue: _selectedCategory,
-          items: categories
-              .map((c) => DropdownMenuItem(value: c, child: Text(c)))
-              .toList(),
-          onChanged: (v) => setState(() {
-            _selectedCategory = v;
-            final exs = vm.exerciseDict[v] ?? const <String>[];
-            _selectedExercise = exs.isNotEmpty ? exs.first : null;
-          }),
-        ),
-        const SizedBox(height: 12),
-        DropdownButtonFormField<String>(
-          key: ValueKey(_selectedCategory),
-          decoration: const InputDecoration(labelText: 'Exercise'),
-          initialValue: _selectedExercise,
-          items: exercises
-              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
-              .toList(),
-          onChanged: (v) => setState(() => _selectedExercise = v),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<String>(
+                  decoration: const InputDecoration(labelText: 'Category'),
+                  initialValue: _selectedCategory,
+                  items: categories
+                      .map((c) => DropdownMenuItem(value: c, child: Text(c)))
+                      .toList(),
+                  onChanged: (v) => setState(() {
+                    _selectedCategory = v;
+                    final exs = vm.exerciseDict[v] ?? const <String>[];
+                    _selectedExercise = exs.isNotEmpty ? exs.first : null;
+                  }),
+                ),
+                const SizedBox(height: 12),
+                DropdownButtonFormField<String>(
+                  key: ValueKey(_selectedCategory),
+                  decoration: const InputDecoration(labelText: 'Exercise'),
+                  initialValue: _selectedExercise,
+                  items: exercises
+                      .map((e) => DropdownMenuItem(value: e, child: Text(e)))
+                      .toList(),
+                  onChanged: (v) => setState(() => _selectedExercise = v),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: _metrics.map((m) {
+                    final selected = m == _metric;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(m),
+                        selected: selected,
+                        onSelected: (_) => setState(() => _metric = m),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+                _rangeRow(),
+              ],
+            ),
+          ),
         ),
         const SizedBox(height: 16),
-        Row(
-          children: _metrics.map((m) {
-            final selected = m == _metric;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(m),
-                selected: selected,
-                onSelected: (_) => setState(() => _metric = m),
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 12),
-        _rangeRow(),
-        const SizedBox(height: 20),
         Expanded(
           child: data.length < 2
               ? const NotEnoughChartData()
-              : MetricChart(
-                  data: data,
-                  axisLabel: (v) => _metric == 'Volume'
-                      ? '${(v / 1000).toStringAsFixed(1)}k'
-                      : v.toStringAsFixed(0),
-                  bottomLabel: (d) => '${monthAbbrev(d.month)} ${d.day}',
-                  tooltipTitle: (d) =>
-                      '${monthAbbrev(d.month)} ${d.day}, ${d.year}',
-                  tooltipValue: (v) => _metric == 'Volume'
-                      ? '${v.toStringAsFixed(0)} $unitLabel·reps'
-                      : '${v.toStringAsFixed(1)} $unitLabel',
+              : Card(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 16, 16, 12),
+                    child: MetricChart(
+                      data: data,
+                      axisLabel: (v) => _metric == 'Volume'
+                          ? '${(v / 1000).toStringAsFixed(1)}k'
+                          : v.toStringAsFixed(0),
+                      bottomLabel: (d) => '${monthAbbrev(d.month)} ${d.day}',
+                      tooltipTitle: (d) =>
+                          '${monthAbbrev(d.month)} ${d.day}, ${d.year}',
+                      tooltipValue: (v) => _metric == 'Volume'
+                          ? '${v.toStringAsFixed(0)} $unitLabel·reps'
+                          : '${v.toStringAsFixed(1)} $unitLabel',
+                    ),
+                  ),
                 ),
         ),
       ],
@@ -235,62 +251,78 @@ class _ProgressViewState extends State<ProgressView> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: _Period.values.map((p) {
-            final selected = p == _period;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(_periodLabel[p]!),
-                selected: selected,
-                onSelected: (_) => setState(() => _period = p),
-              ),
-            );
-          }).toList(),
+        Card(
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: _Period.values.map((p) {
+                    final selected = p == _period;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(_periodLabel[p]!),
+                        selected: selected,
+                        onSelected: (_) => setState(() => _period = p),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: availableMetrics.map((m) {
+                    final selected = m == _overviewMetric;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: ChoiceChip(
+                        label: Text(_metricLabel[m]!),
+                        selected: selected,
+                        onSelected: (_) => setState(() => _overviewMetric = m),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 12),
+                _rangeRow(),
+              ],
+            ),
+          ),
         ),
-        const SizedBox(height: 12),
-        Row(
-          children: availableMetrics.map((m) {
-            final selected = m == _overviewMetric;
-            return Padding(
-              padding: const EdgeInsets.only(right: 8),
-              child: ChoiceChip(
-                label: Text(_metricLabel[m]!),
-                selected: selected,
-                onSelected: (_) => setState(() => _overviewMetric = m),
-              ),
-            );
-          }).toList(),
-        ),
-        const SizedBox(height: 12),
-        _rangeRow(),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
         Expanded(
           child: data.length < 2
               ? const NotEnoughChartData()
-              : MetricChart(
-                  data: data,
-                  axisLabel: (v) => _overviewMetric == _OverviewMetric.volume
-                      ? '${(v / 1000).toStringAsFixed(1)}k'
-                      : v.toStringAsFixed(0),
-                  bottomLabel: (d) => _period == _Period.year
-                      ? '${d.year}'
-                      : _period == _Period.month
-                      ? '${monthAbbrev(d.month)} ${d.year}'
-                      : '${monthAbbrev(d.month)} ${d.day}',
-                  tooltipTitle: (d) => _period == _Period.year
-                      ? '${d.year}'
-                      : _period == _Period.month
-                      ? '${monthAbbrev(d.month)} ${d.year}'
-                      : '${monthAbbrev(d.month)} ${d.day}, ${d.year}',
-                  tooltipValue: (v) => switch (_overviewMetric) {
-                    _OverviewMetric.volume =>
-                      '${v.toStringAsFixed(0)} $unitLabel·reps',
-                    _OverviewMetric.sets => '${v.toStringAsFixed(0)} sets',
-                    _OverviewMetric.reps => '${v.toStringAsFixed(0)} reps',
-                    _OverviewMetric.workouts =>
-                      '${v.toStringAsFixed(0)} workout${v == 1 ? '' : 's'}',
-                  },
+              : Card(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(8, 16, 16, 12),
+                    child: MetricChart(
+                      data: data,
+                      axisLabel: (v) =>
+                          _overviewMetric == _OverviewMetric.volume
+                          ? '${(v / 1000).toStringAsFixed(1)}k'
+                          : v.toStringAsFixed(0),
+                      bottomLabel: (d) => _period == _Period.year
+                          ? '${d.year}'
+                          : _period == _Period.month
+                          ? '${monthAbbrev(d.month)} ${d.year}'
+                          : '${monthAbbrev(d.month)} ${d.day}',
+                      tooltipTitle: (d) => _period == _Period.year
+                          ? '${d.year}'
+                          : _period == _Period.month
+                          ? '${monthAbbrev(d.month)} ${d.year}'
+                          : '${monthAbbrev(d.month)} ${d.day}, ${d.year}',
+                      tooltipValue: (v) => switch (_overviewMetric) {
+                        _OverviewMetric.volume =>
+                          '${v.toStringAsFixed(0)} $unitLabel·reps',
+                        _OverviewMetric.sets => '${v.toStringAsFixed(0)} sets',
+                        _OverviewMetric.reps => '${v.toStringAsFixed(0)} reps',
+                        _OverviewMetric.workouts =>
+                          '${v.toStringAsFixed(0)} workout${v == 1 ? '' : 's'}',
+                      },
+                    ),
+                  ),
                 ),
         ),
       ],
@@ -415,7 +447,11 @@ class _EmptyState extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.show_chart, size: 64, color: Colors.grey),
+            const IconAvatar(
+              icon: Icons.show_chart,
+              color: Colors.grey,
+              radius: 40,
+            ),
             const SizedBox(height: 16),
             Text(
               title,
