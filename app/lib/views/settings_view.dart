@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/models/weight_unit.dart';
+import 'package:repiq/services/share_service.dart';
 import 'package:repiq/services/theme_controller.dart';
 import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
@@ -113,6 +114,15 @@ class SettingsView extends StatelessWidget {
               loading: vm.isImporting,
               onTap: () => _importCsv(context, vm),
             ),
+            _SettingsRow(
+              icon: Icons.download_rounded,
+              iconColor: cs.secondary,
+              title: 'Export Workout CSV',
+              subtitle: 'Save your full history as a CSV for later analysis',
+              loading: vm.isExporting,
+              enabled: vm.localSetCount > 0,
+              onTap: () => _exportCsv(context, vm),
+            ),
           ],
         ),
 
@@ -208,6 +218,16 @@ class SettingsView extends StatelessWidget {
       await vm.importCsvText(csvText);
     } catch (e) {
       vm.reportImportFailure('Import failed: $e');
+    }
+  }
+
+  Future<void> _exportCsv(BuildContext context, LogViewModel vm) async {
+    final bytes = await vm.exportCsvBytes();
+    if (bytes == null) return;
+    try {
+      await ShareService.shareCsvExport(bytes);
+    } catch (e) {
+      vm.reportImportFailure('Export failed: $e');
     }
   }
 
