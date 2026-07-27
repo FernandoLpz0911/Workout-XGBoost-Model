@@ -94,6 +94,31 @@ class LocalRecommendationEngine {
   static bool _isAssisted(String exercise) =>
       exercise.toLowerCase().contains('assisted');
 
+  /// The weight to base the next recommendation on: whichever weight the
+  /// *majority* of sets in the session used, not necessarily the single
+  /// heaviest set. A top single sitting on top of several backoff sets at a
+  /// lower, more-repeated weight would otherwise get treated as "the"
+  /// session weight, and the next recommendation would then chase
+  /// volume-target reps at a load the lifter only ever tried once for a low
+  /// rep count. Ties (e.g. every set at the same weight, the common case)
+  /// go to the heavier weight, matching the previous max()-based behavior.
+  static double _workingSetWeight(List<WorkoutSet> sess) {
+    final counts = <double, int>{};
+    for (final s in sess) {
+      counts[s.weight] = (counts[s.weight] ?? 0) + 1;
+    }
+    var best = sess.first.weight;
+    var bestCount = 0;
+    for (final entry in counts.entries) {
+      if (entry.value > bestCount ||
+          (entry.value == bestCount && entry.key > best)) {
+        best = entry.key;
+        bestCount = entry.value;
+      }
+    }
+    return best;
+  }
+
   /// True when the last 4 sessions show no 1RM gain >= 2.5 lbs — indicates a
   /// true plateau rather than normal fluctuation.
   static bool _isPlateaued(List<List<WorkoutSet>> sessions) {
@@ -306,9 +331,16 @@ class LocalRecommendationEngine {
     }
 
     final lastSess = workingSessions.last;
-    final lastMaxW = lastSess.map((s) => s.weight).reduce(max);
+    // The weight the recommendation is actually built around — the one most
+    // of the session's sets used, not necessarily its single heaviest set
+    // (e.g. a top single sitting on top of several lighter backoff sets).
+    final lastMaxW = _workingSetWeight(lastSess);
+    // Only sets AT that weight count toward "how many reps did I get" — a
+    // backoff set at a different, lower weight isn't evidence of readiness
+    // for more reps at the weight actually being carried forward.
+    final workSets = lastSess.where((s) => s.weight == lastMaxW).toList();
     final lastAvgReps =
-        lastSess.map((s) => s.reps).reduce((a, b) => a + b) / lastSess.length;
+        workSets.map((s) => s.reps).reduce((a, b) => a + b) / workSets.length;
     final last1RM = lastSess
         .map((s) => calcOneRM(s.weight, s.reps))
         .reduce(max);
@@ -325,9 +357,11 @@ class LocalRecommendationEngine {
         .toList();
     final momentum = _slope(recent1RMs);
 
-    // Rep consistency: a ratio < 0.5 means reps collapsed across sets
-    // (e.g. 10 → 7 → 3), suggesting the weight was too heavy to sustain.
-    final repVals = lastSess.map((s) => s.reps.toDouble()).toList();
+    // Rep consistency: a ratio < 0.5 means reps collapsed across sets at the
+    // same weight (e.g. 10 → 7 → 3), suggesting it was too heavy to sustain.
+    // Restricted to workSets so an intentional top-single-then-backoff
+    // structure doesn't misread as a fatigue collapse.
+    final repVals = workSets.map((s) => s.reps.toDouble()).toList();
     final repConsistency = repVals.length > 1
         ? (repVals.reduce(min) /
                   (repVals.reduce((a, b) => a + b) / repVals.length))
@@ -376,7 +410,11 @@ class LocalRecommendationEngine {
       'Arms': 0.85,
     };
     final threshold = thresholds[category] ?? 0.95;
-    final required1RM = targetWeight * (1 + 0.0333 * targetReps);
+    // The baseStatus target's required 1RM — used only to judge whether that
+    // target is too ambitious for the safety override below. The version
+    // actually returned to the caller is recomputed after the overrides
+    // settle on a final targetWeight/targetReps, further down.
+    final baseRequired1RM = targetWeight * (1 + 0.0333 * targetReps);
     String status;
 
     if (lastMaxW == 0) {
@@ -384,7 +422,7 @@ class LocalRecommendationEngine {
           ? volumeTargetReps + 3
           : defaultReps;
       status = 'BODYWEIGHT: Add reps to progress';
-    } else if (momentum < -2.0 && last1RM < required1RM * threshold) {
+    } else if (momentum < -2.0 && last1RM < baseRequired1RM * threshold) {
       // Declining trend combined with an ambitious target — pull back weight
       // to stay within the safety threshold rather than risk regression/injury.
       var adjusted = (_workingWeight(last1RM, targetReps) / 2.5).round() * 2.5;
@@ -398,6 +436,11 @@ class LocalRecommendationEngine {
     } else {
       status = baseStatus;
     }
+
+    // Recomputed from the final targetWeight/targetReps so it always
+    // matches whatever was actually decided above, not the pre-override
+    // baseline.
+    final required1RM = targetWeight * (1 + 0.0333 * targetReps);
 
     final insights = <String>[];
     if (hadFormIssue) {
