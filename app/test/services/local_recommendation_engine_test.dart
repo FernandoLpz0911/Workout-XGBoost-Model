@@ -423,6 +423,21 @@ void main() {
       expect(rec.notesInsight.toLowerCase(), contains('declining'));
     });
 
+    test('required1RM reflects the override-adjusted weight, not the '
+        'pre-override target', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: decliningHistory,
+        mode: TrainingMode.strength,
+      );
+      expect(rec.status, contains('ML OVERRIDE'));
+      expect(
+        rec.required1RM,
+        closeTo(rec.targetWeight * (1 + 0.0333 * rec.targetReps), 0.01),
+      );
+    });
+
     test('strong positive momentum adds a climbing notesInsight', () {
       // Sessions: 100 → 120 → 150 lbs at 8 reps — momentum ≈ +32
       final risingHistory = [
@@ -572,6 +587,66 @@ void main() {
       );
       // Epley(135, 8) = 135 × (1 + 0.0333 × 8) ≈ 170.97
       expect(rec.predicted1RM, closeTo(170.97, 0.5));
+    });
+  });
+
+  group('recommend — mixed-weight sessions (top single + backoff sets)', () {
+    test('recommends the majority backoff weight, not a one-off heavier '
+        'top single', () {
+      // A single heavy top set (40×8) sitting on top of two backoff sets
+      // at a lower, more-repeated weight (35×9, 35×8) — the weight that's
+      // actually been trained for volume is 35, not the 40 tried once.
+      final history = [
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 40, 8),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 9),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 8),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: history,
+        mode: TrainingMode.hypertrophy,
+      );
+      expect(rec.targetWeight, 35.0);
+      expect(rec.targetReps, 12);
+      expect(rec.status, contains('VOLUME'));
+    });
+
+    test('a uniform-weight session still picks that weight (regression)', () {
+      final history = [
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 100, 10),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 100, 10),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: history,
+        mode: TrainingMode.hypertrophy,
+      );
+      expect(rec.targetWeight, 100.0);
+    });
+
+    test('a top single with consistent backoff reps does not falsely trigger '
+        'rep-drop stabilization', () {
+      // Whole-session reps [3, 10, 10, 10] would look like a collapse
+      // (min/mean ≈ 0.36 < 0.5) if averaged across weights, but the
+      // backoff sets at the actual working weight (35) are perfectly
+      // consistent — this is an intentional top-set-then-backoff
+      // structure, not fatigue.
+      final history = [
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 50, 3),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 10),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 10),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 10),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: history,
+        mode: TrainingMode.hypertrophy,
+      );
+      expect(rec.status, isNot(contains('Rep drop')));
+      expect(rec.targetWeight, 35.0);
     });
   });
 
