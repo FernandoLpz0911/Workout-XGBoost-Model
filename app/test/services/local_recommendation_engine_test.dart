@@ -702,6 +702,64 @@ void main() {
     });
   });
 
+  group('recommend — in-progress session is excluded from the baseline', () {
+    test('logging a set today does not change the recommendation for the '
+        'next set of the same session', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Bench Press', 'Chest', 135.0, 8),
+        ws(base.add(const Duration(days: 7)), 'Bench Press', 'Chest', 135.0, 8),
+        ws(
+          base.add(const Duration(days: 14)),
+          'Bench Press',
+          'Chest',
+          135.0,
+          8,
+        ),
+        ws(
+          base.add(const Duration(days: 21)),
+          'Bench Press',
+          'Chest',
+          135.0,
+          8,
+        ),
+      ];
+      final before = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: history,
+      );
+      expect(before.status, contains('DELOAD'));
+
+      // Simulate the user having just logged today's first set at the
+      // heavier weight the app itself recommended before this set existed.
+      final afterLoggingToday = [
+        ...history,
+        ws(DateTime.now(), 'Bench Press', 'Chest', 110.0, 12),
+      ];
+      final after = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: afterLoggingToday,
+      );
+
+      expect(after.status, before.status);
+      expect(after.targetWeight, before.targetWeight);
+      expect(after.targetReps, before.targetReps);
+    });
+
+    test('a brand-new exercise logged only today still gets a recommendation '
+        'from that data (no prior session to fall back on)', () {
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: [ws(DateTime.now(), 'Bench Press', 'Chest', 135.0, 8)],
+      );
+      expect(rec.status, isNot(contains('NEW EXERCISE')));
+      expect(rec.targetWeight, greaterThan(0));
+    });
+  });
+
   group('recommend — plateau breaker', () {
     List<WorkoutSet> flatSessions(
       int count, {

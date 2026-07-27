@@ -103,6 +103,22 @@ class LocalRecommendationEngine {
     return rms.reduce(max) - rms.first < 2.5;
   }
 
+  /// Drops today's own sets so a recommendation computed mid-workout still
+  /// treats the last *completed* day as "last session" — otherwise, logging
+  /// a set makes today itself the new "last session" for the very next
+  /// recommendation, letting the plan (and any plateau/deload verdict) flip
+  /// mid-session instead of staying stable until the next day's session.
+  /// Falls back to the full list when every set is from today (brand-new
+  /// exercise), since there's no completed session to fall back on yet.
+  static List<WorkoutSet> _excludeInProgressSession(List<WorkoutSet> raw) {
+    if (raw.isEmpty) return raw;
+    final today = DateTime.now();
+    bool isToday(DateTime d) =>
+        d.year == today.year && d.month == today.month && d.day == today.day;
+    final priorDays = raw.where((s) => !isToday(s.date)).toList();
+    return priorDays.isEmpty ? raw : priorDays;
+  }
+
   static List<List<WorkoutSet>> _groupBySessions(List<WorkoutSet> sets) {
     final map = <String, List<WorkoutSet>>{};
     for (final s in sets) {
@@ -164,11 +180,11 @@ class LocalRecommendationEngine {
     final graduationReps = isStrength ? 8 : 12;
     const assistanceDecrement = 5.0;
 
-    final raw =
-        history
-            .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
-            .toList()
-          ..sort((a, b) => a.date.compareTo(b.date));
+    final raw = _excludeInProgressSession(
+      history
+          .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
+          .toList(),
+    )..sort((a, b) => a.date.compareTo(b.date));
 
     if (raw.isEmpty) {
       return Recommendation(
@@ -245,12 +261,12 @@ class LocalRecommendationEngine {
     final double weightIncrement = isStrength ? 5.0 : 2.5;
     final String modeLabel = isStrength ? 'STRENGTH' : 'HYPERTROPHY';
 
-    final raw =
-        allHistory
-            .where((s) => s.exercise == exercise)
-            .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
-            .toList()
-          ..sort((a, b) => a.date.compareTo(b.date));
+    final raw = _excludeInProgressSession(
+      allHistory
+          .where((s) => s.exercise == exercise)
+          .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
+          .toList(),
+    )..sort((a, b) => a.date.compareTo(b.date));
 
     if (raw.isEmpty) {
       return Recommendation(
@@ -436,12 +452,12 @@ class LocalRecommendationEngine {
   }) {
     final bool isStrength = mode == TrainingMode.strength;
 
-    final raw =
-        allHistory
-            .where((s) => s.exercise == exercise)
-            .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
-            .toList()
-          ..sort((a, b) => a.date.compareTo(b.date));
+    final raw = _excludeInProgressSession(
+      allHistory
+          .where((s) => s.exercise == exercise)
+          .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
+          .toList(),
+    )..sort((a, b) => a.date.compareTo(b.date));
 
     if (raw.isEmpty) {
       return Recommendation(
