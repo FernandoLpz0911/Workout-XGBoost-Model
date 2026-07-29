@@ -19,12 +19,14 @@ class _RecParams {
   final List<Map<String, dynamic>> setsJson;
   final String mode;
   final String algorithm;
+  final int cycleStart;
   const _RecParams(
     this.exercise,
     this.category,
     this.setsJson,
     this.mode,
     this.algorithm,
+    this.cycleStart,
   );
 }
 
@@ -40,6 +42,7 @@ Recommendation _computeRec(_RecParams p) {
     algorithm: p.algorithm == 'plateauBreaker'
         ? ProgressionAlgorithm.plateauBreaker
         : ProgressionAlgorithm.standard,
+    plateauBreakerCycleStart: p.cycleStart,
   );
 }
 
@@ -110,6 +113,12 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   Map<String, TrainingMode> _trainingModes = {};
 
   Map<String, ProgressionAlgorithm> _progressionAlgorithms = {};
+
+  /// Qualifying-session-count baseline recorded the moment an exercise's
+  /// algorithm was switched to plateau-breaker, so [LocalRecommendationEngine]
+  /// can count sessions relative to that switch instead of the exercise's
+  /// whole history. Absent entries default to 0 (the old whole-history count).
+  Map<String, int> _plateauBreakerCycleStart = {};
 
   Map<String, DayMetadata> _dayMetadata = {};
 
@@ -275,6 +284,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     await _loadHistory();
     await _loadTrainingModes();
     await _loadProgressionAlgorithms();
+    await _loadPlateauBreakerCycleStart();
     await _seedPlateauBreakerAlgorithmsIfNeeded();
     await _loadDayMetadata();
     _rebuildDict();
@@ -317,6 +327,27 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
+  int plateauBreakerCycleStartFor(String exercise) =>
+      _plateauBreakerCycleStart[exercise] ?? 0;
+
+  Future<void> _loadPlateauBreakerCycleStart() async {
+    _plateauBreakerCycleStart = await _storage.loadPlateauBreakerCycleStart();
+  }
+
+  void _savePlateauBreakerCycleStart() {
+    _storage.savePlateauBreakerCycleStart(_plateauBreakerCycleStart);
+  }
+
+  /// Records today's qualifying-session-count as [exercise]'s plateau-breaker
+  /// cycle baseline — call exactly when the algorithm is switched to
+  /// [ProgressionAlgorithm.plateauBreaker], so the wave phase starts fresh
+  /// from this point instead of counting sessions logged before the switch.
+  void _startPlateauBreakerCycle(String exercise) {
+    _plateauBreakerCycleStart[exercise] =
+        LocalRecommendationEngine.qualifyingSessionCount(exercise, history);
+    _savePlateauBreakerCycleStart();
+  }
+
   /// One-time migration: assigns [ProgressionAlgorithm.plateauBreaker] to
   /// any [_plateauBreakerCandidates] the user has actually logged, without
   /// overriding an algorithm they've already chosen for that exercise.
@@ -333,6 +364,9 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
       if (loggedExercises.contains(ex) &&
           !_progressionAlgorithms.containsKey(ex)) {
         _progressionAlgorithms[ex] = ProgressionAlgorithm.plateauBreaker;
+        // Start the wave fresh from this silent seed rather than counting
+        // sessions logged long before plateau-breaker existed.
+        _startPlateauBreakerCycle(ex);
         changed = true;
       }
     }
@@ -449,6 +483,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
             .toList(),
         ex.trainingMode.name,
         ex.progressionAlgorithm.name,
+        plateauBreakerCycleStartFor(ex.exercise),
       );
       compute(_computeRec, params)
           .then((rec) {
@@ -494,8 +529,13 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
       return;
     }
     if (exerciseTypeOf(category) == ExerciseType.strength) {
+      final previous = _progressionAlgorithms[exercise];
       _progressionAlgorithms[exercise] = algorithm;
       _saveProgressionAlgorithms();
+      if (algorithm == ProgressionAlgorithm.plateauBreaker &&
+          previous != ProgressionAlgorithm.plateauBreaker) {
+        _startPlateauBreakerCycle(exercise);
+      }
     }
     final ex = SessionExercise(
       exercise: exercise,
@@ -611,8 +651,20 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     isHistoryLoading = true;
     notifyListeners();
     try {
-      history = await _storage.loadAll();
-      history.sort((a, b) => b.date.compareTo(a.date));
+      // loadAll() returns sets oldest-first with same-day ties already
+      // broken by insertion order. List.sort isn't guaranteed stable, so
+      // sorting straight to newest-first here could reshuffle same-day
+      // sets (very common for FitNotes imports, which only carry a
+      // day-level date) — decorate with the pre-sort index and use it as
+      // an explicit tiebreaker instead, which keeps each day's sets in
+      // their original (performed) order no matter how large the list is.
+      final loaded = await _storage.loadAll();
+      final indexed = loaded.asMap().entries.toList()
+        ..sort((a, b) {
+          final byDate = b.value.date.compareTo(a.value.date);
+          return byDate != 0 ? byDate : a.key.compareTo(b.key);
+        });
+      history = indexed.map((e) => e.value).toList();
       _invalidateHistoryCache();
       localSetCount = history.length;
     } catch (e) {

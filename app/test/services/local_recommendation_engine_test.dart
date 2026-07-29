@@ -145,7 +145,7 @@ void main() {
       expect(rec.status, contains('HYPERTROPHY PROGRESSION'));
     });
 
-    test('targets 12 reps (volume push) when avg reps are 8–11', () {
+    test('volume push steps up gradually from last reps, capped at 12', () {
       final history = [
         ws(base, 'Bench Press', 'Chest', 100, 10),
         ws(base, 'Bench Press', 'Chest', 100, 10),
@@ -157,11 +157,27 @@ void main() {
         mode: TrainingMode.hypertrophy,
       );
       expect(rec.targetWeight, 100.0);
-      expect(rec.targetReps, 12);
+      // min(volumeTargetReps=12, lastAvgReps.round()=10 + 1) = 11
+      expect(rec.targetReps, 11);
       expect(rec.status, contains('VOLUME'));
     });
 
-    test('stabilizes at 10 reps when avg reps < 8', () {
+    test('volume push never exceeds the 12-rep ceiling even near it', () {
+      final history = [
+        ws(base, 'Bench Press', 'Chest', 100, 11),
+        ws(base, 'Bench Press', 'Chest', 100, 11),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: history,
+        mode: TrainingMode.hypertrophy,
+      );
+      // min(12, 11 + 1) = 12
+      expect(rec.targetReps, 12);
+    });
+
+    test('stabilization steps up gradually from last reps, capped at 10', () {
       final history = [
         ws(base, 'Bench Press', 'Chest', 100, 6),
         ws(base, 'Bench Press', 'Chest', 100, 6),
@@ -173,7 +189,8 @@ void main() {
         mode: TrainingMode.hypertrophy,
       );
       expect(rec.targetWeight, 100.0);
-      expect(rec.targetReps, 10);
+      // min(stabilizeReps=10, lastAvgReps.round()=6 + 1) = 7
+      expect(rec.targetReps, 7);
       expect(rec.status, contains('STABILIZATION'));
     });
 
@@ -226,7 +243,7 @@ void main() {
       expect(rec.status, contains('STRENGTH VOLUME'));
     });
 
-    test('stabilizes at 4 reps when avg reps < 3', () {
+    test('stabilization steps up gradually from avg reps < 3', () {
       final history = [
         ws(base, 'Deadlift', 'Back', 300, 2),
         ws(base, 'Deadlift', 'Back', 300, 2),
@@ -238,7 +255,8 @@ void main() {
         mode: TrainingMode.strength,
       );
       expect(rec.targetWeight, 300.0);
-      expect(rec.targetReps, 4);
+      // min(stabilizeReps=4, lastAvgReps.round()=2 + 1) = 3
+      expect(rec.targetReps, 3);
       expect(rec.status, contains('STRENGTH STABILIZATION'));
     });
   });
@@ -305,6 +323,25 @@ void main() {
         );
       }
     });
+
+    test('negated form-issue phrasing does not trigger FORM FOCUS', () {
+      for (final comment in [
+        'nothing felt wrong today',
+        'no issues, sloppy form was not a problem',
+      ]) {
+        final history = [ws(base, 'Squat', 'Legs', 200, 8, comment: comment)];
+        final rec = LocalRecommendationEngine.recommend(
+          exercise: 'Squat',
+          category: 'Legs',
+          allHistory: history,
+        );
+        expect(
+          rec.status,
+          isNot(contains('FORM FOCUS')),
+          reason: 'did not expect FORM FOCUS for comment "$comment"',
+        );
+      }
+    });
   });
   group('recommend — fatigue detection', () {
     final base = DateTime(2026, 1, 1);
@@ -319,6 +356,18 @@ void main() {
         allHistory: history,
       );
       expect(rec.notesInsight.toLowerCase(), contains('fatigue'));
+    });
+
+    test('negated fatigue phrasing does not add a fatigue insight', () {
+      final history = [
+        ws(base, 'Lat Pulldown', 'Back', 100, 10, comment: 'not tired at all'),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Lat Pulldown',
+        category: 'Back',
+        allHistory: history,
+      );
+      expect(rec.notesInsight.toLowerCase(), isNot(contains('fatigue')));
     });
 
     test('no fatigue insight when comment is clean', () {
@@ -545,6 +594,28 @@ void main() {
       );
       expect(rec.targetReps, greaterThan(12));
     });
+
+    test(
+      'graduating a bodyweight exercise never leaks a nonzero target weight',
+      () {
+        // avgReps = 12 >= graduationReps triggers the PROGRESSION branch
+        // internally (which would add weightIncrement to a 0 base) before
+        // the bodyweight override resets status/reps — targetWeight must
+        // still come out at exactly 0, not a stray 2.5.
+        final history = [
+          ws(base, 'Pull Up', 'Back', 0, 12),
+          ws(base, 'Pull Up', 'Back', 0, 12),
+        ];
+        final rec = LocalRecommendationEngine.recommend(
+          exercise: 'Pull Up',
+          category: 'Back',
+          allHistory: history,
+          mode: TrainingMode.hypertrophy,
+        );
+        expect(rec.status, contains('BODYWEIGHT'));
+        expect(rec.targetWeight, 0.0);
+      },
+    );
   });
   group('recommend — multi-session history', () {
     test('uses the most recent session for weight/rep decisions', () {
@@ -608,7 +679,8 @@ void main() {
         mode: TrainingMode.hypertrophy,
       );
       expect(rec.targetWeight, 35.0);
-      expect(rec.targetReps, 12);
+      // avg reps at 35 lbs = (9+8)/2 = 8.5 → min(12, round(8.5)+1) = 10
+      expect(rec.targetReps, 10);
       expect(rec.status, contains('VOLUME'));
     });
 
@@ -774,6 +846,67 @@ void main() {
         allHistory: history,
       );
       expect(rec.status, isNot(contains('DELOAD')));
+    });
+
+    test('a heavy lift with a small absolute but negligible percentage gain '
+        'still plateaus', () {
+      // 300 → 300 → 300 → 305 lbs at 8 reps. Raw gain is 6.3 lbs e1RM —
+      // above the old flat 2.5 lb bar, so the old absolute-threshold
+      // check would have missed this plateau. 1.7% is still well under
+      // the 2% relative bar, so it should still register as one.
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Squat', 'Legs', 300.0, 8),
+        ws(base.add(const Duration(days: 7)), 'Squat', 'Legs', 300.0, 8),
+        ws(base.add(const Duration(days: 14)), 'Squat', 'Legs', 300.0, 8),
+        ws(base.add(const Duration(days: 21)), 'Squat', 'Legs', 305.0, 8),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Squat',
+        category: 'Legs',
+        allHistory: history,
+      );
+      expect(rec.status, contains('DELOAD'));
+    });
+
+    test('a light lift with a small absolute but real percentage gain does '
+        'not falsely plateau', () {
+      // 20 → 20 → 20 → 21 lbs at 10 reps. Raw gain is ~1.3 lbs e1RM —
+      // under the old flat 2.5 lb bar, so the old check would have
+      // wrongly flagged this as a plateau. It's actually a genuine ~5%
+      // improvement for a light accessory lift, so it shouldn't.
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Dumbbell Curl', 'Biceps', 20.0, 10),
+        ws(
+          base.add(const Duration(days: 7)),
+          'Dumbbell Curl',
+          'Biceps',
+          20.0,
+          10,
+        ),
+        ws(
+          base.add(const Duration(days: 14)),
+          'Dumbbell Curl',
+          'Biceps',
+          20.0,
+          10,
+        ),
+        ws(
+          base.add(const Duration(days: 21)),
+          'Dumbbell Curl',
+          'Biceps',
+          21.0,
+          10,
+        ),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Dumbbell Curl',
+        category: 'Biceps',
+        allHistory: history,
+      );
+      expect(rec.status, isNot(contains('DELOAD')));
+      expect(rec.status, contains('VOLUME'));
     });
   });
 
@@ -993,6 +1126,64 @@ void main() {
       );
       expect(rec.notesInsight, contains('12+'));
     });
+
+    test('bases the wave baseline on the majority weight, not a one-off '
+        'heavier top single', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Cable Curl', 'Chest', 100, 10),
+        ws(base.add(const Duration(days: 7)), 'Cable Curl', 'Chest', 100, 10),
+        // Last session: a heavy one-off single (150×3) plus two backoff
+        // sets at the actual working weight (100), same shape as the
+        // standard-algorithm mixed-weight bug.
+        ws(base.add(const Duration(days: 14)), 'Cable Curl', 'Chest', 150, 3),
+        ws(base.add(const Duration(days: 14)), 'Cable Curl', 'Chest', 100, 10),
+        ws(base.add(const Duration(days: 14)), 'Cable Curl', 'Chest', 100, 10),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: history,
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+      );
+      expect(rec.status, contains('PLATEAU-BREAKER: Heavy Wave'));
+      // baseline = avg working weight across last 3 sessions = 100 (not
+      // skewed by the 150 single) × 1.10 = 110, not the ~127.5 the old
+      // reduce(max)-based baseline would have produced.
+      expect(rec.targetWeight, 110.0);
+    });
+
+    test('plateauBreakerCycleStart resets the wave phase instead of counting '
+        'the exercise\'s whole history', () {
+      final history = flatSessions(10);
+
+      final wholeHistoryPhase = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: history,
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+      );
+      // 10 sessions counted from scratch → phase index 10 % 3 = 1
+      // (Moderate), wave 10 ~/ 3 = 3.
+      expect(wholeHistoryPhase.status, contains('Moderate Wave'));
+      expect(wholeHistoryPhase.status, contains('wave 3'));
+
+      final freshCyclePhase = LocalRecommendationEngine.recommend(
+        exercise: 'Cable Curl',
+        category: 'Chest',
+        allHistory: history,
+        algorithm: ProgressionAlgorithm.plateauBreaker,
+        plateauBreakerCycleStart: 7,
+      );
+      // Only 10 - 7 = 3 sessions into the cycle → back to Heavy Wave,
+      // session 1/3, wave 1 — same shape as a genuinely fresh cycle,
+      // instead of picking up mid-wave from history logged before
+      // plateau-breaker was ever turned on for this exercise.
+      expect(freshCyclePhase.status, contains('PLATEAU-BREAKER: Heavy Wave'));
+      expect(freshCyclePhase.status, contains('session 1/3'));
+      expect(freshCyclePhase.status, contains('wave 1'));
+      expect(freshCyclePhase.targetReps, 5);
+    });
   });
 
   group('recommend — assisted exercises', () {
@@ -1079,7 +1270,8 @@ void main() {
       );
       expect(rec.status, contains('ASSISTED VOLUME'));
       expect(rec.targetWeight, 40.0);
-      expect(rec.targetReps, 12);
+      // min(graduationReps=12, lastAvgReps.round()=8 + 1) = 9
+      expect(rec.targetReps, 9);
     });
 
     test('zero assistance is flagged as a bodyweight milestone', () {
@@ -1104,7 +1296,9 @@ void main() {
         mode: TrainingMode.hypertrophy,
       );
       expect(rec.status, contains('BODYWEIGHT'));
-      expect(rec.targetReps, 10);
+      // Keeps climbing from what was actually achieved (15) instead of
+      // capping at a flat +2 over the default — 15 + 2 = 17.
+      expect(rec.targetReps, 17);
     });
 
     test('form issue holds assistance weight steady', () {
@@ -1133,6 +1327,40 @@ void main() {
         allHistory: history,
       );
       expect(rec.targetWeight, 25.0);
+    });
+  });
+
+  group('qualifyingSessionCount', () {
+    test('counts distinct qualifying days for an exercise', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Cable Curl', 'Chest', 100, 10),
+        ws(base.add(const Duration(days: 7)), 'Cable Curl', 'Chest', 100, 10),
+        ws(base.add(const Duration(days: 14)), 'Cable Curl', 'Chest', 100, 10),
+      ];
+      expect(
+        LocalRecommendationEngine.qualifyingSessionCount('Cable Curl', history),
+        3,
+      );
+    });
+
+    test('ignores sets from other exercises', () {
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Cable Curl', 'Chest', 100, 10),
+        ws(base, 'Squat', 'Legs', 200, 8),
+      ];
+      expect(
+        LocalRecommendationEngine.qualifyingSessionCount('Cable Curl', history),
+        1,
+      );
+    });
+
+    test('is zero for an exercise with no history', () {
+      expect(
+        LocalRecommendationEngine.qualifyingSessionCount('Cable Curl', []),
+        0,
+      );
     });
   });
 }
