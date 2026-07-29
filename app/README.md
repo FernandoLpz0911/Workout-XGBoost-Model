@@ -26,7 +26,7 @@ All workout data is stored in a local SQLite database on the device. No account,
 | **On-device recommendations** | `LocalRecommendationEngine` runs the same hybrid-1RM + six-branch decision-tree logic as the Python backend — fully offline, zero latency |
 | **Hybrid 1RM estimation** | Automatically selects Brzycki (1–6 reps), Epley (7–11), or Mayhew (12+) for the most accurate estimate at any rep range |
 | **Per-exercise training mode** | Each exercise can be individually set to `strength` or `hypertrophy`; the engine adjusts target rep ranges, increments, and graduation thresholds accordingly |
-| **Plateau detection** | If 1RM hasn't improved by 2.5 lbs over four sessions, the engine prescribes a deload to 60% of working weight automatically |
+| **Plateau detection** | If 1RM hasn't improved by 2% over four sessions, the engine prescribes a deload to 60% of working weight automatically |
 | **Comment-aware logic** | Set notes ("too heavy", "grip gave out", "sloppy") are scanned for form issues and fatigue signals that override progression rules |
 | **Rest timer** | Configurable countdown with vibration and sound; fires a local notification when time is up even if the app is backgrounded |
 | **FitNotes CSV import/export** | Bring an existing training history in, or export RepIQ data back out, via the device file picker |

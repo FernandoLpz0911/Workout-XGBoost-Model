@@ -220,6 +220,60 @@ void main() {
       expect(await storage.count(), 2);
     });
 
+    test('imports identical straight sets on the same day without dropping '
+        'duplicates', () async {
+      // FitNotes only exports a day-level date, so three ordinary
+      // straight sets (same exercise, weight, reps, same day) would
+      // previously collide on the day-level fingerprint and only the
+      // first would survive the import.
+      const csv =
+          '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
+2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,
+2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,
+2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,
+''';
+      final count = await storage.importFromCsvText(csv);
+      expect(count, 3);
+      expect(await storage.count(), 3);
+    });
+
+    test('re-importing the same file with duplicate straight sets stays '
+        'idempotent', () async {
+      const csv =
+          '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
+2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,
+2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,
+2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,
+''';
+      await storage.importFromCsvText(csv);
+      final secondImportCount = await storage.importFromCsvText(csv);
+      expect(secondImportCount, 0);
+      expect(await storage.count(), 3);
+    });
+
+    test(
+      'preserves the CSV row order for same-day sets across exercises',
+      () async {
+        const csv =
+            '''Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment
+2026-01-15,Bench Press,Chest,135.0,lbs,8,,,,
+2026-01-15,Bench Press,Chest,135.0,lbs,7,,,,
+2026-01-15,Overhead Press,Shoulders,65.0,lbs,10,,,,
+2026-01-15,Overhead Press,Shoulders,65.0,lbs,9,,,,
+2026-01-15,Bench Press,Chest,135.0,lbs,6,,,,
+''';
+        await storage.importFromCsvText(csv);
+        final loaded = await storage.loadAll();
+        expect(loaded.map((s) => '${s.exercise}:${s.reps}').toList(), [
+          'Bench Press:8',
+          'Bench Press:7',
+          'Overhead Press:10',
+          'Overhead Press:9',
+          'Bench Press:6',
+        ]);
+      },
+    );
+
     test('returns 0 for a header-only CSV', () async {
       const headerOnly =
           'Date,Exercise,Category,Weight,Weight Unit,Reps,Distance,Distance Unit,Time,Comment\n';
@@ -397,6 +451,34 @@ void main() {
       expect(loaded['Bench Press'], 'plateauBreaker');
     });
   });
+
+  group('loadPlateauBreakerCycleStart', () {
+    test('returns empty map when nothing is saved', () async {
+      expect(await storage.loadPlateauBreakerCycleStart(), isEmpty);
+    });
+  });
+
+  group(
+    'savePlateauBreakerCycleStart / loadPlateauBreakerCycleStart round-trip',
+    () {
+      test('persists and restores per-exercise baselines', () async {
+        await storage.savePlateauBreakerCycleStart({
+          'Bench Press': 4,
+          'Squat': 0,
+        });
+        final loaded = await storage.loadPlateauBreakerCycleStart();
+        expect(loaded['Bench Press'], 4);
+        expect(loaded['Squat'], 0);
+      });
+
+      test('overwrites previous baselines on re-save', () async {
+        await storage.savePlateauBreakerCycleStart({'Bench Press': 4});
+        await storage.savePlateauBreakerCycleStart({'Bench Press': 9});
+        final loaded = await storage.loadPlateauBreakerCycleStart();
+        expect(loaded['Bench Press'], 9);
+      });
+    },
+  );
 
   group('loadDayMetadata', () {
     test('returns empty map when nothing is saved', () async {

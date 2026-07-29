@@ -32,7 +32,7 @@ Most training apps suggest generic progression rules. RepIQ learns your specific
 | **Comment-aware training** | NLP tagging of set notes flags form issues, fatigue, drop sets, and warm-ups, which feed into the model and the deload logic |
 | **Six-branch decision tree** | FORM FOCUS → DELOAD → PROGRESSION → STABILIZATION → VOLUME → ML OVERRIDE, in priority order |
 | **Safety thresholds by muscle group** | Arms/Shoulders require a higher fraction of predicted capacity before a weight increase is suggested, reflecting injury risk |
-| **Plateau detection** | If 1RM hasn't improved by 2.5 lbs over four sessions, the app prescribes an automatic deload to 60% |
+| **Plateau detection** | If 1RM hasn't improved by 2% over four sessions, the app prescribes an automatic deload to 60% |
 | **Rolling momentum** | A 3-session polyfit slope distinguishes real strength trends from session-to-session noise |
 | **Local-first everywhere** | The Flutter app stores all data in SQLite on-device; the backend stores all models and data on local disk — no account, no sync, no third-party data collection |
 

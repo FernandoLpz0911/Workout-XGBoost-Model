@@ -24,6 +24,19 @@ class LocalRecommendationEngine {
   static double _workingWeight(double oneRM, int reps) =>
       oneRM / (1 + 0.0333 * reps);
 
+  /// Category-specific safety floors: larger muscle groups (Legs, Chest,
+  /// Back) need a higher capacity threshold before adding weight because
+  /// the load is heavier and injury risk is greater than for smaller
+  /// groups (Arms). Shared by the standard and plateau-breaker algorithms
+  /// so the two can't silently drift out of sync.
+  static const _categoryThresholds = <String, double>{
+    'Legs': 0.95,
+    'Chest': 0.95,
+    'Back': 0.95,
+    'Shoulders': 0.90,
+    'Arms': 0.85,
+  };
+
   /// Least-squares slope across [ys] — used to detect rising/falling 1RM
   /// momentum over the last three sessions.
   static double _slope(List<double> ys) {
@@ -39,37 +52,63 @@ class LocalRecommendationEngine {
     return den == 0 ? 0.0 : num / den;
   }
 
+  /// Negation cues that, when they appear shortly before a matched keyword,
+  /// mean the comment is denying the issue rather than reporting it (e.g.
+  /// "nothing felt wrong", "not tired today"). Checked within a short
+  /// character window immediately before the keyword — not a full parse,
+  /// just enough to catch the common phrasings.
+  static const _negationCues = [
+    'not ',
+    'no ',
+    'nothing ',
+    "wasn't ",
+    "didn't ",
+    'without ',
+  ];
+
+  static bool _isNegated(String s, int keywordIndex) {
+    final windowStart = max(0, keywordIndex - 20);
+    final window = s.substring(windowStart, keywordIndex);
+    return _negationCues.any(window.contains);
+  }
+
+  /// True if [s] contains [keyword] and it isn't immediately negated.
+  static bool _containsUnnegated(String s, String keyword) {
+    final i = s.indexOf(keyword);
+    return i != -1 && !_isNegated(s, i);
+  }
+
   static bool _isFormIssue(String c) {
     final s = c.toLowerCase();
-    return s.contains('did it wrong') ||
-        s.contains('wrong') ||
-        s.contains('unsure') ||
-        s.contains('too heavy') ||
-        s.contains('failed') ||
+    return _containsUnnegated(s, 'did it wrong') ||
+        _containsUnnegated(s, 'wrong') ||
+        _containsUnnegated(s, 'unsure') ||
+        _containsUnnegated(s, 'too heavy') ||
+        _containsUnnegated(s, 'failed') ||
         s.contains("couldn't") ||
         s.contains("can't complete") ||
-        s.contains('sloppy') ||
-        s.contains('lost balance') ||
+        _containsUnnegated(s, 'sloppy') ||
+        _containsUnnegated(s, 'lost balance') ||
         (s.contains('form is') &&
             (s.contains('off') || s.contains('weird') || s.contains('bad'))) ||
-        s.contains('feeling tricep') ||
-        s.contains('feeling arm') ||
-        s.contains('injury');
+        _containsUnnegated(s, 'feeling tricep') ||
+        _containsUnnegated(s, 'feeling arm') ||
+        _containsUnnegated(s, 'injury');
   }
 
   static bool _isFatigue(String c) {
     final s = c.toLowerCase();
-    return s.contains('forearm') ||
-        s.contains('fatigued') ||
-        s.contains('tired') ||
-        s.contains('gave out') ||
-        s.contains('grip loose') ||
-        s.contains('grip gave') ||
-        s.contains('grip gone') ||
-        s.contains('grip tiring') ||
-        s.contains('arms gave') ||
-        s.contains('tiring out') ||
-        s.contains('limiting');
+    return _containsUnnegated(s, 'forearm') ||
+        _containsUnnegated(s, 'fatigued') ||
+        _containsUnnegated(s, 'tired') ||
+        _containsUnnegated(s, 'gave out') ||
+        _containsUnnegated(s, 'grip loose') ||
+        _containsUnnegated(s, 'grip gave') ||
+        _containsUnnegated(s, 'grip gone') ||
+        _containsUnnegated(s, 'grip tiring') ||
+        _containsUnnegated(s, 'arms gave') ||
+        _containsUnnegated(s, 'tiring out') ||
+        _containsUnnegated(s, 'limiting');
   }
 
   static bool _isDropSet(String c) {
@@ -119,13 +158,19 @@ class LocalRecommendationEngine {
     return best;
   }
 
-  /// True when the last 4 sessions show no 1RM gain >= 2.5 lbs — indicates a
-  /// true plateau rather than normal fluctuation.
+  /// True when the last 4 sessions show less than 2 % e1RM gain from the
+  /// oldest of the window to its best — indicates a true plateau rather
+  /// than normal fluctuation. Percentage-based rather than a flat lb bar so
+  /// it scales with the weight being lifted: 2.5 lbs is a real jump on a
+  /// 50 lb accessory lift but noise on a 400 lb deadlift.
   static bool _isPlateaued(List<List<WorkoutSet>> sessions) {
     final rms = sessions
         .map((s) => s.map((w) => calcOneRM(w.weight, w.reps)).reduce(max))
         .toList();
-    return rms.reduce(max) - rms.first < 2.5;
+    final first = rms.first;
+    final bestGain = rms.reduce(max) - first;
+    if (first <= 0) return bestGain < 2.5;
+    return (bestGain / first) < 0.02;
   }
 
   /// Drops today's own sets so a recommendation computed mid-workout still
@@ -156,6 +201,44 @@ class LocalRecommendationEngine {
     return sortedKeys.map((k) => map[k]!).toList();
   }
 
+  /// [exercise]'s sessions, filtered to drop sets/warm-ups and today's
+  /// in-progress session, then grouped by day with each session's own
+  /// sub-60%-of-max sets excluded as likely warm-ups. Shared by both
+  /// algorithms so "qualifying session" means exactly the same thing
+  /// everywhere it's counted.
+  static List<List<WorkoutSet>> _workingSessionsFor(
+    String exercise,
+    List<WorkoutSet> allHistory,
+  ) {
+    final raw = _excludeInProgressSession(
+      allHistory
+          .where((s) => s.exercise == exercise)
+          .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
+          .toList(),
+    )..sort((a, b) => a.date.compareTo(b.date));
+    if (raw.isEmpty) return [];
+
+    return _groupBySessions(raw)
+        .map((sess) {
+          final maxW = sess.map((s) => s.weight).reduce(max);
+          return sess
+              .where((s) => maxW == 0 || s.weight >= 0.6 * maxW)
+              .toList();
+        })
+        .where((sess) => sess.isNotEmpty)
+        .toList();
+  }
+
+  /// Number of qualifying sessions logged for [exercise] so far. Callers
+  /// use this to record a plateau-breaker cycle baseline at the moment the
+  /// algorithm is switched on for an exercise, so [_recommendPlateauBreaker]'s
+  /// wave phase starts fresh from that point instead of from the exercise's
+  /// whole history.
+  static int qualifyingSessionCount(
+    String exercise,
+    List<WorkoutSet> allHistory,
+  ) => _workingSessionsFor(exercise, allHistory).length;
+
   /// Returns a [Recommendation] for [exercise] given the user's full history.
   ///
   /// The [mode] parameter selects between hypertrophy and strength progressions.
@@ -169,6 +252,7 @@ class LocalRecommendationEngine {
     required List<WorkoutSet> allHistory,
     TrainingMode mode = TrainingMode.hypertrophy,
     ProgressionAlgorithm algorithm = ProgressionAlgorithm.standard,
+    int plateauBreakerCycleStart = 0,
   }) {
     if (_isAssisted(exercise)) {
       return _recommendAssisted(
@@ -182,6 +266,7 @@ class LocalRecommendationEngine {
         category: category,
         allHistory: allHistory,
         mode: mode,
+        cycleStartSessionCount: plateauBreakerCycleStart,
       );
     }
     return _recommendStandard(
@@ -242,8 +327,11 @@ class LocalRecommendationEngine {
       status = 'FORM FOCUS: Repeat assistance level to nail technique';
     } else if (lastAssistance <= 0) {
       targetWeight = 0.0;
+      // Keeps climbing from what was actually done instead of capping at a
+      // fixed +2 forever — otherwise a lifter well past graduation can get
+      // handed a target lower than the reps they already achieved.
       targetReps = lastAvgReps >= graduationReps
-          ? defaultReps + 2
+          ? lastAvgReps.round() + 2
           : defaultReps;
       status = 'BODYWEIGHT: No assistance needed — add reps to progress';
     } else if (lastAvgReps >= graduationReps) {
@@ -252,8 +340,9 @@ class LocalRecommendationEngine {
       status = 'ASSISTED PROGRESSION: Assistance reduced';
     } else {
       targetWeight = lastAssistance;
-      targetReps = graduationReps;
-      status = 'ASSISTED VOLUME: Push for $graduationReps reps';
+      // Gradual step toward the graduation ceiling rather than a flat jump.
+      targetReps = min(graduationReps, lastAvgReps.round() + 1);
+      status = 'ASSISTED VOLUME: Push for $targetReps reps';
     }
 
     return Recommendation(
@@ -286,14 +375,11 @@ class LocalRecommendationEngine {
     final double weightIncrement = isStrength ? 5.0 : 2.5;
     final String modeLabel = isStrength ? 'STRENGTH' : 'HYPERTROPHY';
 
-    final raw = _excludeInProgressSession(
-      allHistory
-          .where((s) => s.exercise == exercise)
-          .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
-          .toList(),
-    )..sort((a, b) => a.date.compareTo(b.date));
+    // Exclude intra-session warm-up weights: any set below 60 % of that
+    // session's top weight is likely a warm-up that would inflate rep counts.
+    final workingSessions = _workingSessionsFor(exercise, allHistory);
 
-    if (raw.isEmpty) {
+    if (workingSessions.isEmpty) {
       return Recommendation(
         targetReps: defaultReps,
         targetWeight: 0.0,
@@ -302,31 +388,6 @@ class LocalRecommendationEngine {
         required1RM: 0,
         notesInsight:
             'No sets logged for this exercise yet. Start conservative and build up.',
-      );
-    }
-
-    final sessions = _groupBySessions(raw);
-
-    // Exclude intra-session warm-up weights: any set below 60 % of that
-    // session's top weight is likely a warm-up that would inflate rep counts.
-    final workingSessions = sessions
-        .map((sess) {
-          final maxW = sess.map((s) => s.weight).reduce(max);
-          return sess
-              .where((s) => maxW == 0 || s.weight >= 0.6 * maxW)
-              .toList();
-        })
-        .where((sess) => sess.isNotEmpty)
-        .toList();
-
-    if (workingSessions.isEmpty) {
-      return Recommendation(
-        targetReps: defaultReps,
-        targetWeight: 45.0,
-        status: 'BASELINE: Insufficient quality sets found',
-        predicted1RM: 0,
-        required1RM: 0,
-        notesInsight: '',
       );
     }
 
@@ -391,25 +452,19 @@ class LocalRecommendationEngine {
       baseStatus = '$modeLabel PROGRESSION: Weight Increased';
     } else if (lastAvgReps < stabilizeThreshold) {
       targetWeight = lastMaxW;
-      targetReps = stabilizeReps;
+      // Step up gradually from what was actually done rather than jumping
+      // straight to the stabilize ceiling — a one-rep session shouldn't be
+      // asked to more-than-triple in one go.
+      targetReps = min(stabilizeReps, lastAvgReps.round() + 1);
       baseStatus = '$modeLabel STABILIZATION: Build rep count first';
     } else {
       targetWeight = lastMaxW;
-      targetReps = volumeTargetReps;
-      baseStatus = '$modeLabel VOLUME: Push for $volumeTargetReps reps';
+      // Same gradual step for the volume-push ceiling.
+      targetReps = min(volumeTargetReps, lastAvgReps.round() + 1);
+      baseStatus = '$modeLabel VOLUME: Push for $targetReps reps';
     }
 
-    // Category-specific safety floors: larger muscle groups (Legs, Chest, Back)
-    // need a higher capacity threshold before adding weight because the load is
-    // heavier and injury risk is greater than for smaller groups (Arms).
-    const thresholds = <String, double>{
-      'Legs': 0.95,
-      'Chest': 0.95,
-      'Back': 0.95,
-      'Shoulders': 0.90,
-      'Arms': 0.85,
-    };
-    final threshold = thresholds[category] ?? 0.95;
+    final threshold = _categoryThresholds[category] ?? 0.95;
     // The baseStatus target's required 1RM — used only to judge whether that
     // target is too ambitious for the safety override below. The version
     // actually returned to the caller is recomputed after the overrides
@@ -418,8 +473,12 @@ class LocalRecommendationEngine {
     String status;
 
     if (lastMaxW == 0) {
+      // Bodyweight exercise — always weightless, regardless of what the
+      // baseStatus branch above computed (e.g. the graduation branch adds
+      // weightIncrement to a 0 base, which must not leak through here).
+      targetWeight = 0.0;
       targetReps = (lastAvgReps >= graduationReps)
-          ? volumeTargetReps + 3
+          ? lastAvgReps.round() + 2
           : defaultReps;
       status = 'BODYWEIGHT: Add reps to progress';
     } else if (momentum < -2.0 && last1RM < baseRequired1RM * threshold) {
@@ -492,17 +551,13 @@ class LocalRecommendationEngine {
     required String category,
     required List<WorkoutSet> allHistory,
     TrainingMode mode = TrainingMode.hypertrophy,
+    int cycleStartSessionCount = 0,
   }) {
     final bool isStrength = mode == TrainingMode.strength;
 
-    final raw = _excludeInProgressSession(
-      allHistory
-          .where((s) => s.exercise == exercise)
-          .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
-          .toList(),
-    )..sort((a, b) => a.date.compareTo(b.date));
+    final workingSessions = _workingSessionsFor(exercise, allHistory);
 
-    if (raw.isEmpty) {
+    if (workingSessions.isEmpty) {
       return Recommendation(
         targetReps: isStrength ? 5 : 10,
         targetWeight: 0.0,
@@ -515,17 +570,6 @@ class LocalRecommendationEngine {
       );
     }
 
-    final sessions = _groupBySessions(raw);
-    final workingSessions = sessions
-        .map((sess) {
-          final maxW = sess.map((s) => s.weight).reduce(max);
-          return sess
-              .where((s) => maxW == 0 || s.weight >= 0.6 * maxW)
-              .toList();
-        })
-        .where((sess) => sess.isNotEmpty)
-        .toList();
-
     // Not enough history to compute a meaningful wave/trend yet.
     if (workingSessions.length < 3) {
       return _recommendStandard(
@@ -537,7 +581,9 @@ class LocalRecommendationEngine {
     }
 
     final lastSess = workingSessions.last;
-    final lastMaxW = lastSess.map((s) => s.weight).reduce(max);
+    // Same fix as the standard algorithm: base the weight on whichever load
+    // the session's sets mostly used, not a one-off heavier top single.
+    final lastMaxW = _workingSetWeight(lastSess);
     final last1RM = lastSess
         .map((s) => calcOneRM(s.weight, s.reps))
         .reduce(max);
@@ -603,19 +649,27 @@ class LocalRecommendationEngine {
       );
     }
 
-    // Wave phase derived from total qualifying session count (stateless —
-    // recommend() has no persisted "cycle start" marker to count from).
     final baselineWindow = workingSessions.sublist(
       workingSessions.length - min(3, workingSessions.length),
     );
     final baselineWeight =
         baselineWindow
-            .map((sess) => sess.map((s) => s.weight).reduce(max))
+            .map((sess) => _workingSetWeight(sess))
             .reduce((a, b) => a + b) /
         baselineWindow.length;
 
-    final phaseIndex = workingSessions.length % 3;
-    final waveNumber = workingSessions.length ~/ 3;
+    // Wave phase counts sessions since the cycle was actually started for
+    // this exercise (persisted by the caller when the algorithm is first
+    // switched to plateau-breaker), not the exercise's whole history — so
+    // turning the mode on doesn't drop you mid-wave from sessions logged
+    // before it was ever enabled. cycleStartSessionCount defaults to 0 for
+    // callers that don't track it, preserving the old whole-history count.
+    final sessionsIntoCycle = max(
+      0,
+      workingSessions.length - cycleStartSessionCount,
+    );
+    final phaseIndex = sessionsIntoCycle % 3;
+    final waveNumber = sessionsIntoCycle ~/ 3;
 
     final (
       targetReps,
@@ -646,16 +700,8 @@ class LocalRecommendationEngine {
     double targetWeight = (rawWeight / 2.5).round() * 2.5;
     if (targetWeight <= 0) targetWeight = lastMaxW;
 
-    // Category safety clamp on the Heavy phase only — reuses the same
-    // threshold table as the standard algorithm.
-    const thresholds = <String, double>{
-      'Legs': 0.95,
-      'Chest': 0.95,
-      'Back': 0.95,
-      'Shoulders': 0.90,
-      'Arms': 0.85,
-    };
-    final threshold = thresholds[category] ?? 0.95;
+    // Category safety clamp on the Heavy phase only.
+    final threshold = _categoryThresholds[category] ?? 0.95;
     double required1RM = targetWeight * (1 + 0.0333 * targetReps);
     if (phaseIndex == 0 && last1RM > 0 && required1RM > last1RM * threshold) {
       targetWeight =
@@ -676,7 +722,7 @@ class LocalRecommendationEngine {
     if (hadFatigue) {
       insights.add('Fatigue was logged last session — consider extra rest.');
     }
-    if (workingSessions.length >= 12 && pctChange < 6.0) {
+    if (sessionsIntoCycle >= 12 && pctChange < 6.0) {
       insights.add(
         'This exercise has been in the plateau-breaker cycle for 12+ '
         'sessions without resolving. Consider reviewing recovery, '
