@@ -330,20 +330,21 @@ class _ProgressViewState extends State<ProgressView> {
   }
 
   Widget _rangeRow() {
-    return Row(
-      children: _ranges.entries.map((e) {
-        final selected = e.value == _daysBack;
-        return Padding(
-          padding: const EdgeInsets.only(right: 6),
-          child: ChoiceChip(
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: Row(
+        spacing: 6,
+        children: _ranges.entries.map((e) {
+          final selected = e.value == _daysBack;
+          return ChoiceChip(
             label: Text(e.key),
             selected: selected,
             onSelected: (_) => setState(() => _daysBack = e.value),
             labelStyle: const TextStyle(fontSize: 12),
             padding: const EdgeInsets.symmetric(horizontal: 4),
-          ),
-        );
-      }).toList(),
+          );
+        }).toList(),
+      ),
     );
   }
 
