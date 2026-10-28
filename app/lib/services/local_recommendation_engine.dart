@@ -118,7 +118,7 @@ class LocalRecommendationEngine {
         s.contains('no rest');
   }
 
-  static bool _isWarmup(String c) {
+  static bool isWarmup(String c) {
     final s = c.toLowerCase();
     return s.contains('warmup') ||
         s.contains('warm up') ||
@@ -130,7 +130,7 @@ class LocalRecommendationEngine {
   /// less weight means less assistance, i.e. more progress. The inverse of
   /// every other exercise, so these never go through the 1RM-based standard
   /// or plateau-breaker paths.
-  static bool _isAssisted(String exercise) =>
+  static bool isAssisted(String exercise) =>
       exercise.toLowerCase().contains('assisted');
 
   /// The weight to base the next recommendation on: whichever weight the
@@ -213,7 +213,7 @@ class LocalRecommendationEngine {
     final raw = _excludeInProgressSession(
       allHistory
           .where((s) => s.exercise == exercise)
-          .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
+          .where((s) => !_isDropSet(s.comment) && !isWarmup(s.comment))
           .toList(),
     )..sort((a, b) => a.date.compareTo(b.date));
     if (raw.isEmpty) return [];
@@ -254,7 +254,7 @@ class LocalRecommendationEngine {
     ProgressionAlgorithm algorithm = ProgressionAlgorithm.standard,
     int plateauBreakerCycleStart = 0,
   }) {
-    if (_isAssisted(exercise)) {
+    if (isAssisted(exercise)) {
       return _recommendAssisted(
         history: allHistory.where((s) => s.exercise == exercise).toList(),
         mode: mode,
@@ -292,7 +292,7 @@ class LocalRecommendationEngine {
 
     final raw = _excludeInProgressSession(
       history
-          .where((s) => !_isDropSet(s.comment) && !_isWarmup(s.comment))
+          .where((s) => !_isDropSet(s.comment) && !isWarmup(s.comment))
           .toList(),
     )..sort((a, b) => a.date.compareTo(b.date));
 

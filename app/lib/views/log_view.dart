@@ -9,6 +9,7 @@ import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/widgets/app_card.dart';
 import 'package:repiq/views/widgets/day_metadata_dialogs.dart';
 import 'package:repiq/views/widgets/note_indicator.dart';
+import 'package:repiq/views/widgets/pr_badge.dart';
 
 export 'package:repiq/viewmodels/log_viewmodel.dart' show TrainingMode;
 
@@ -623,6 +624,7 @@ class _SetRow extends StatelessWidget {
           ),
           const SizedBox(width: 4),
           NoteIndicator(comment: set.comment),
+          PrBadge(set: set),
           const Spacer(),
           IconButton(
             icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.grey),

@@ -9,6 +9,7 @@ import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/local_recommendation_engine.dart';
 import 'package:repiq/services/local_storage_service.dart';
 import 'package:repiq/services/notification_service.dart';
+import 'package:repiq/services/personal_records.dart';
 
 export '../models/recommendation_models.dart'
     show TrainingMode, ProgressionAlgorithm;
@@ -275,7 +276,15 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     return grouped;
   }
 
-  void _invalidateHistoryCache() => _historyByDateCache = null;
+  /// Keys ([WorkoutSet.date]) of every set that was a personal record.
+  Set<DateTime> get prSetDates =>
+      _prSetDatesCache ??= personalRecordDates(history);
+  Set<DateTime>? _prSetDatesCache;
+
+  void _invalidateHistoryCache() {
+    _historyByDateCache = null;
+    _prSetDatesCache = null;
+  }
 
   Future<void> _initialize() async {
     isDictLoading = true;

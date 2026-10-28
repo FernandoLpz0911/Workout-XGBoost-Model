@@ -7,6 +7,7 @@ import 'package:repiq/views/exercise_detail_view.dart';
 import 'package:repiq/views/log_view.dart';
 import 'package:repiq/views/widgets/app_card.dart';
 import 'package:repiq/views/widgets/note_indicator.dart';
+import 'package:repiq/views/widgets/pr_badge.dart';
 
 /// Displays the full workout history grouped by date, then by exercise.
 class HistoryView extends StatelessWidget {
@@ -190,6 +191,7 @@ class ExerciseHistorySection extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   NoteIndicator(comment: s.comment),
+                  PrBadge(set: s),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(
