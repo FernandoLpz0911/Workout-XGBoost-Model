@@ -1,14 +1,71 @@
 part of '../log_view.dart';
 
-class _ExerciseDetailPage extends StatefulWidget {
+/// Exercise screen with three tabs: TRACK (log sets), HISTORY, GRAPH.
+class _ExerciseDetailPage extends StatelessWidget {
   final int exerciseIndex;
   const _ExerciseDetailPage({required this.exerciseIndex});
 
   @override
-  State<_ExerciseDetailPage> createState() => _ExerciseDetailPageState();
+  Widget build(BuildContext context) {
+    return Consumer<LogViewModel>(
+      builder: (context, vm, _) {
+        if (exerciseIndex >= vm.session.length) {
+          WidgetsBinding.instance.addPostFrameCallback(
+            (_) => Navigator.pop(context),
+          );
+          return const Scaffold();
+        }
+        final ex = vm.session[exerciseIndex];
+        return DefaultTabController(
+          length: 3,
+          child: Scaffold(
+            appBar: AppBar(
+              title: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(ex.exercise),
+                  Text(
+                    ex.category,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      color: Colors.grey,
+                      fontWeight: FontWeight.normal,
+                    ),
+                  ),
+                ],
+              ),
+              bottom: const TabBar(
+                tabs: [
+                  Tab(text: 'TRACK'),
+                  Tab(text: 'HISTORY'),
+                  Tab(text: 'GRAPH'),
+                ],
+              ),
+            ),
+            body: TabBarView(
+              children: [
+                _TrackTab(exerciseIndex: exerciseIndex),
+                ExerciseHistoryTab(exercise: ex.exercise),
+                ExerciseGraphTab(exercise: ex.exercise, category: ex.category),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 }
 
-class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
+class _TrackTab extends StatefulWidget {
+  final int exerciseIndex;
+  const _TrackTab({required this.exerciseIndex});
+
+  @override
+  State<_TrackTab> createState() => _TrackTabState();
+}
+
+class _TrackTabState extends State<_TrackTab>
+    with AutomaticKeepAliveClientMixin {
   double _weight = 0;
   int _reps = 0;
   final _distCtrl = TextEditingController();
@@ -17,12 +74,46 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
   final _noteCtrl = TextEditingController();
   bool _initialized = false;
 
+  /// Index into the exercise's logged sets being edited, or null when
+  /// logging a new set.
+  int? _editingIndex;
+
+  @override
+  bool get wantKeepAlive => true;
+
   void _maybeInit(SessionExercise ex) {
     if (_initialized) return;
     _initialized = true;
+    _useSuggestion(ex);
+  }
+
+  /// Fills the steppers from the current recommendation (no setState).
+  void _useSuggestion(SessionExercise ex) {
     final rec = ex.recommendation;
     _weight = rec?.targetWeight ?? 0.0;
     _reps = rec?.targetReps ?? 8;
+  }
+
+  void _clear(SessionExercise ex) {
+    setState(() {
+      _editingIndex = null;
+      _useSuggestion(ex);
+      _distCtrl.clear();
+      _durCtrl.clear();
+      _noteCtrl.clear();
+    });
+  }
+
+  void _loadSet(int index, WorkoutSet s) {
+    setState(() {
+      _editingIndex = index;
+      _weight = s.weight;
+      _reps = s.reps;
+      _distCtrl.text = s.distance != null ? s.distance!.toStringAsFixed(2) : '';
+      _distUnit = s.distanceUnit ?? 'mi';
+      _durCtrl.text = s.duration ?? '';
+      _noteCtrl.text = s.comment;
+    });
   }
 
   @override
@@ -45,12 +136,10 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
     }
   }
 
-  void _save(LogViewModel vm, SessionExercise ex, ExerciseType type) {
-    final date = DateTime.now();
-    final WorkoutSet set;
+  WorkoutSet _buildSet(SessionExercise ex, ExerciseType type, DateTime date) {
     switch (type) {
       case ExerciseType.strength:
-        set = WorkoutSet(
+        return WorkoutSet(
           date: date,
           exercise: ex.exercise,
           category: ex.category,
@@ -59,7 +148,7 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
           comment: _noteCtrl.text.trim(),
         );
       case ExerciseType.cardio:
-        set = WorkoutSet(
+        return WorkoutSet(
           date: date,
           exercise: ex.exercise,
           category: ex.category,
@@ -69,7 +158,7 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
           comment: _noteCtrl.text.trim(),
         );
       case ExerciseType.passive:
-        set = WorkoutSet(
+        return WorkoutSet(
           date: date,
           exercise: ex.exercise,
           category: ex.category,
@@ -77,154 +166,164 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
           comment: _noteCtrl.text.trim(),
         );
     }
-    vm.logSet(widget.exerciseIndex, set);
+  }
+
+  void _save(LogViewModel vm, SessionExercise ex, ExerciseType type) {
+    final editing = _editingIndex;
+    if (editing != null && editing < ex.sets.length) {
+      // Keep the original timestamp so the set stays in place.
+      vm.updateSet(
+        widget.exerciseIndex,
+        editing,
+        _buildSet(ex, type, ex.sets[editing].date),
+      );
+      setState(() => _editingIndex = null);
+      _noteCtrl.clear();
+      return;
+    }
+    vm.logSet(widget.exerciseIndex, _buildSet(ex, type, DateTime.now()));
     _noteCtrl.clear();
     final timer = context.read<RestTimer>();
     if (timer.autoStartEnabled) timer.start();
   }
 
-  void _showEditSet(
-    BuildContext context,
-    int setIndex,
-    SessionExercise ex,
-    LogViewModel vm,
-  ) {
-    showDialog<bool>(
-      context: context,
-      builder: (_) => _LogSetDialog(
-        exercise: ex.exercise,
-        category: ex.category,
-        recommendation: ex.recommendation,
-        existingSet: ex.sets[setIndex],
-        onSave: (updated) =>
-            vm.updateSet(widget.exerciseIndex, setIndex, updated),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Consumer<LogViewModel>(
       builder: (context, vm, _) {
         if (widget.exerciseIndex >= vm.session.length) {
-          WidgetsBinding.instance.addPostFrameCallback(
-            (_) => Navigator.pop(context),
-          );
-          return const Scaffold();
+          return const SizedBox.shrink();
         }
-
         final ex = vm.session[widget.exerciseIndex];
         _maybeInit(ex);
         final type = exerciseTypeOf(ex.category);
         final units = context.watch<UnitsController>();
+        final editing = _editingIndex != null;
 
-        return Scaffold(
-          appBar: AppBar(
-            title: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+          children: [
+            if (type == ExerciseType.strength) ...[
+              _TrainingModeToggle(
+                mode: ex.trainingMode,
+                onChanged: (m) => vm.setTrainingMode(widget.exerciseIndex, m),
+              ),
+              const SizedBox(height: 12),
+              _SuggestionLine(
+                ex: ex,
+                onUse: () => setState(() => _useSuggestion(ex)),
+              ),
+              const SizedBox(height: 12),
+            ] else ...[
+              _RecBanner(ex: ex),
+              const SizedBox(height: 12),
+            ],
+            Card(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    if (type == ExerciseType.strength)
+                      ..._buildStrengthInputs(units)
+                    else if (type == ExerciseType.cardio)
+                      ..._buildCardioInputs()
+                    else
+                      ..._buildPassiveInputs(),
+                    const SizedBox(height: 20),
+                    TextField(
+                      controller: _noteCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Note (optional)',
+                        hintText: 'e.g. "forearms tired"',
+                        isDense: true,
+                      ),
+                      maxLines: 2,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Row(
               children: [
-                Text(ex.exercise),
-                Text(
-                  ex.category,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.grey,
-                    fontWeight: FontWeight.normal,
+                Expanded(
+                  child: SizedBox(
+                    height: 52,
+                    child: ElevatedButton(
+                      onPressed: _canSave(type)
+                          ? () => _save(vm, ex, type)
+                          : null,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Theme.of(context).colorScheme.primary,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: Text(
+                        editing ? 'UPDATE' : 'SAVE',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: SizedBox(
+                    height: 52,
+                    child: OutlinedButton(
+                      onPressed: () => _clear(ex),
+                      style: OutlinedButton.styleFrom(
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                      child: const Text(
+                        'CLEAR',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
                   ),
                 ),
               ],
             ),
-          ),
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
-            children: [
-              if (type == ExerciseType.strength) ...[
-                _TrainingModeToggle(
-                  mode: ex.trainingMode,
-                  onChanged: (m) => vm.setTrainingMode(widget.exerciseIndex, m),
-                ),
-                const SizedBox(height: 16),
-              ],
-              _RecBanner(ex: ex),
-              const SizedBox(height: 16),
+            if (ex.sets.isNotEmpty) ...[
+              const SizedBox(height: 28),
+              const SectionHeader('Logged Today'),
               Card(
                 child: Padding(
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
                   child: Column(
-                    children: [
-                      if (type == ExerciseType.strength)
-                        ..._buildStrengthInputs(units)
-                      else if (type == ExerciseType.cardio)
-                        ..._buildCardioInputs()
-                      else
-                        ..._buildPassiveInputs(),
-                      const SizedBox(height: 20),
-                      TextField(
-                        controller: _noteCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Note (optional)',
-                          hintText: 'e.g. "forearms tired"',
-                          isDense: true,
-                        ),
-                        maxLines: 2,
-                      ),
-                    ],
+                    children: ex.sets
+                        .asMap()
+                        .entries
+                        .map(
+                          (e) => _SetRow(
+                            setNum: e.key + 1,
+                            set: e.value,
+                            selected: _editingIndex == e.key,
+                            onTap: () => _loadSet(e.key, e.value),
+                            onDelete: () {
+                              if (_editingIndex != null) {
+                                setState(() => _editingIndex = null);
+                              }
+                              vm.removeSet(widget.exerciseIndex, e.key);
+                            },
+                          ),
+                        )
+                        .toList(),
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _canSave(type) ? () => _save(vm, ex, type) : null,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                  child: Text(
-                    type == ExerciseType.cardio
-                        ? 'Save Lap'
-                        : type == ExerciseType.passive
-                        ? 'Save Session'
-                        : 'Save Set',
-                    style: const TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-              if (ex.sets.isNotEmpty) ...[
-                const SizedBox(height: 28),
-                const SectionHeader('Logged Today'),
-                Card(
-                  child: Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
-                    child: Column(
-                      children: ex.sets
-                          .asMap()
-                          .entries
-                          .map(
-                            (e) => _SetRow(
-                              setNum: e.key + 1,
-                              set: e.value,
-                              onEdit: () =>
-                                  _showEditSet(context, e.key, ex, vm),
-                              onDelete: () =>
-                                  vm.removeSet(widget.exerciseIndex, e.key),
-                            ),
-                          )
-                          .toList(),
-                    ),
-                  ),
-                ),
-              ],
             ],
-          ),
+          ],
         );
       },
     );
@@ -308,22 +407,15 @@ class _ExerciseDetailPageState extends State<_ExerciseDetailPage> {
   ];
 }
 
-/// Displays the machine learning recommendation for strength exercises, or a last-session
-/// summary for cardio/passive exercises.
-class _RecBanner extends StatelessWidget {
+/// Compact one-line suggestion for strength exercises: "Suggested: 30.0 lbs
+/// × 8" with a Use button, plus the engine's reason text underneath.
+class _SuggestionLine extends StatelessWidget {
   final SessionExercise ex;
-  const _RecBanner({required this.ex});
+  final VoidCallback onUse;
+  const _SuggestionLine({required this.ex, required this.onUse});
 
   @override
   Widget build(BuildContext context) {
-    final type = exerciseTypeOf(ex.category);
-
-    if (type != ExerciseType.strength) {
-      final summary = ex.lastSessionSummary;
-      if (summary == null || summary.isEmpty) return const SizedBox.shrink();
-      return _InfoChip(color: Colors.blue, icon: Icons.history, text: summary);
-    }
-
     if (ex.recError != null) {
       return _InfoChip(
         color: Colors.grey,
@@ -334,16 +426,24 @@ class _RecBanner extends StatelessWidget {
     final rec = ex.recommendation;
     if (rec == null) return const SizedBox.shrink();
     final units = context.watch<UnitsController>();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Recommendation: ${units.toDisplay(rec.targetWeight).toStringAsFixed(1)} '
-          '${units.label} × ${rec.targetReps} reps',
-          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                'Suggested: ${units.toDisplay(rec.targetWeight).toStringAsFixed(1)} '
+                '${units.label} × ${rec.targetReps}',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+            TextButton(onPressed: onUse, child: const Text('Use')),
+          ],
         ),
-        const SizedBox(height: 2),
         Text(
           rec.status,
           style: const TextStyle(fontSize: 12, color: Colors.grey),
@@ -358,6 +458,19 @@ class _RecBanner extends StatelessWidget {
         ],
       ],
     );
+  }
+}
+
+/// Last-session summary for cardio/passive exercises.
+class _RecBanner extends StatelessWidget {
+  final SessionExercise ex;
+  const _RecBanner({required this.ex});
+
+  @override
+  Widget build(BuildContext context) {
+    final summary = ex.lastSessionSummary;
+    if (summary == null || summary.isEmpty) return const SizedBox.shrink();
+    return _InfoChip(color: Colors.blue, icon: Icons.history, text: summary);
   }
 }
 
@@ -395,58 +508,61 @@ class _InfoChip extends StatelessWidget {
   }
 }
 
-/// One logged set row with set number, display text, and edit/delete actions.
+/// One logged set row: set number, display text, PR badge; tap to edit.
 class _SetRow extends StatelessWidget {
   final int setNum;
   final WorkoutSet set;
-  final VoidCallback onEdit;
+  final bool selected;
+  final VoidCallback onTap;
   final VoidCallback onDelete;
   const _SetRow({
     required this.setNum,
     required this.set,
-    required this.onEdit,
+    required this.selected,
+    required this.onTap,
     required this.onDelete,
   });
 
   @override
   Widget build(BuildContext context) {
     final unit = context.watch<UnitsController>().unit;
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Text(
-            '${set.category == 'Cardio' ? 'Lap' : 'Set'} $setNum',
-            style: const TextStyle(color: Colors.grey, fontSize: 13),
-          ),
-          const SizedBox(width: 12),
-          Text(
-            set.displayTextIn(unit),
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(width: 4),
-          NoteIndicator(comment: set.comment),
-          PrBadge(set: set),
-          const Spacer(),
-          IconButton(
-            icon: const Icon(Icons.edit_outlined, size: 16, color: Colors.grey),
-            onPressed: onEdit,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            tooltip: 'Edit',
-          ),
-          const SizedBox(width: 8),
-          IconButton(
-            icon: const Icon(
-              Icons.delete_outline,
-              size: 18,
-              color: Colors.grey,
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        color: selected
+            ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.12)
+            : null,
+        padding: const EdgeInsets.symmetric(vertical: 8),
+        child: Row(
+          children: [
+            SizedBox(
+              width: 28,
+              child: Text(
+                '$setNum',
+                style: const TextStyle(color: Colors.grey, fontSize: 13),
+              ),
             ),
-            onPressed: onDelete,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-          ),
-        ],
+            Text(
+              set.displayTextIn(unit),
+              style: const TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(width: 4),
+            NoteIndicator(comment: set.comment),
+            PrBadge(set: set),
+            const Spacer(),
+            IconButton(
+              icon: const Icon(
+                Icons.delete_outline,
+                size: 18,
+                color: Colors.grey,
+              ),
+              onPressed: onDelete,
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              tooltip: 'Delete',
+            ),
+          ],
+        ),
       ),
     );
   }

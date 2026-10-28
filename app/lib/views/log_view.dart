@@ -8,6 +8,7 @@ import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
 import 'package:repiq/views/widgets/app_card.dart';
+import 'package:repiq/views/exercise_detail_view.dart';
 import 'package:repiq/views/widgets/day_metadata_dialogs.dart';
 import 'package:repiq/views/widgets/note_indicator.dart';
 import 'package:repiq/views/widgets/pr_badge.dart';

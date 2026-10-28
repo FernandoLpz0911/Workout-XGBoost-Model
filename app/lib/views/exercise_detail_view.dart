@@ -11,7 +11,7 @@ import 'package:repiq/views/widgets/note_indicator.dart';
 
 /// Single-exercise deep dive: every past set (grouped by day) alongside a
 /// progress chart, reached by tapping an exercise in the History tab.
-class ExerciseDetailView extends StatefulWidget {
+class ExerciseDetailView extends StatelessWidget {
   final String exercise;
   final String category;
   const ExerciseDetailView({
@@ -21,25 +21,7 @@ class ExerciseDetailView extends StatefulWidget {
   });
 
   @override
-  State<ExerciseDetailView> createState() => _ExerciseDetailViewState();
-}
-
-class _ExerciseDetailViewState extends State<ExerciseDetailView> {
-  String _metric = 'Est. 1RM';
-  static const _metrics = ['Est. 1RM', 'Max Weight', 'Volume'];
-
-  int? _daysBack; // null = All, matches the Graph tab's default range
-  static const _ranges = <String, int?>{
-    '1m': 30,
-    '3m': 90,
-    '6m': 180,
-    '1y': 365,
-    'All': null,
-  };
-
-  @override
   Widget build(BuildContext context) {
-    final isStrength = exerciseTypeOf(widget.category) == ExerciseType.strength;
     return DefaultTabController(
       length: 2,
       child: Scaffold(
@@ -47,9 +29,9 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
           title: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(widget.exercise),
+              Text(exercise),
               Text(
-                widget.category,
+                category,
                 style: const TextStyle(
                   fontSize: 12,
                   color: Colors.grey,
@@ -67,15 +49,47 @@ class _ExerciseDetailViewState extends State<ExerciseDetailView> {
         ),
         body: TabBarView(
           children: [
-            _HistoryTab(exercise: widget.exercise),
-            isStrength ? _buildGraphTab() : const _GraphUnavailable(),
+            ExerciseHistoryTab(exercise: exercise),
+            ExerciseGraphTab(exercise: exercise, category: category),
           ],
         ),
       ),
     );
   }
+}
 
-  Widget _buildGraphTab() {
+/// Progress chart (with metric and range selectors) for one exercise.
+class ExerciseGraphTab extends StatefulWidget {
+  final String exercise;
+  final String category;
+  const ExerciseGraphTab({
+    super.key,
+    required this.exercise,
+    required this.category,
+  });
+
+  @override
+  State<ExerciseGraphTab> createState() => _ExerciseGraphTabState();
+}
+
+class _ExerciseGraphTabState extends State<ExerciseGraphTab> {
+  String _metric = 'Est. 1RM';
+  static const _metrics = ['Est. 1RM', 'Max Weight', 'Volume'];
+
+  int? _daysBack; // null = All
+  static const _ranges = <String, int?>{
+    '1m': 30,
+    '3m': 90,
+    '6m': 180,
+    '1y': 365,
+    'All': null,
+  };
+
+  @override
+  Widget build(BuildContext context) {
+    if (exerciseTypeOf(widget.category) != ExerciseType.strength) {
+      return const _GraphUnavailable();
+    }
     return Consumer<LogViewModel>(
       builder: (context, vm, _) {
         final unit = context.watch<UnitsController>().unit;
@@ -166,9 +180,10 @@ class _GraphUnavailable extends StatelessWidget {
   }
 }
 
-class _HistoryTab extends StatelessWidget {
+/// Every past set for one exercise, grouped by day, with edit/delete.
+class ExerciseHistoryTab extends StatelessWidget {
   final String exercise;
-  const _HistoryTab({required this.exercise});
+  const ExerciseHistoryTab({super.key, required this.exercise});
 
   @override
   Widget build(BuildContext context) {
