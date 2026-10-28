@@ -24,6 +24,36 @@ class LocalRecommendationEngine {
   static double _workingWeight(double oneRM, int reps) =>
       oneRM / (1 + 0.0333 * reps);
 
+  /// True for dumbbell exercises ("Incline Dumbbell Bench Press",
+  /// "DB Skullcrushers"). Gym dumbbells come in 5 lb steps, so a 2.5 lb
+  /// jump or a deload rounded to 2.5 asks for a weight that doesn't exist.
+  static bool isDumbbell(String exercise) {
+    final s = exercise.toLowerCase();
+    return s.contains('dumbbell') || s.startsWith('db ') || s.contains(' db ');
+  }
+
+  /// Smallest weight change available for [exercise].
+  static double weightStep(String exercise) => isDumbbell(exercise) ? 5.0 : 2.5;
+
+  static double _roundTo(double w, double step) => (w / step).round() * step;
+
+  /// Warm-up sets to do before a working weight of [workWeight]: about 50 %
+  /// for 8 and 75 % for 4, rounded to what [exercise] can actually load.
+  /// Steps that round to nothing or up to the working weight are dropped,
+  /// so light lifts get one warm-up or none.
+  static List<(double, int)> warmupRamp(String exercise, double workWeight) {
+    if (workWeight <= 0 || isAssisted(exercise)) return const [];
+    final step = weightStep(exercise);
+    final ramp = <(double, int)>[];
+    for (final (pct, reps) in const [(0.5, 8), (0.75, 4)]) {
+      final w = _roundTo(workWeight * pct, step);
+      if (w <= 0 || w >= workWeight) continue;
+      if (ramp.isNotEmpty && ramp.last.$1 >= w) continue;
+      ramp.add((w, reps));
+    }
+    return ramp;
+  }
+
   /// Category-specific safety floors: larger muscle groups (Legs, Chest,
   /// Back) need a higher capacity threshold before adding weight because
   /// the load is heavier and injury risk is greater than for smaller
@@ -364,15 +394,17 @@ class LocalRecommendationEngine {
     required List<WorkoutSet> allHistory,
     TrainingMode mode = TrainingMode.hypertrophy,
   }) {
-    // Hypertrophy: moderate weight, 8–12 rep range, +2.5 lb jumps
+    // Hypertrophy: moderate weight, 8–10 rep range, +2.5 lb jumps (5 lb for
+    // dumbbells) once every work set reaches 10 — double progression.
     // Strength:    heavy weight,    3–6 rep range,  +5.0 lb jumps
     final bool isStrength = mode == TrainingMode.strength;
-    final int defaultReps = isStrength ? 5 : 10;
-    final int graduationReps = isStrength ? 6 : 12;
-    final int volumeTargetReps = isStrength ? 6 : 12;
+    final int defaultReps = isStrength ? 5 : 8;
+    final int graduationReps = isStrength ? 6 : 10;
+    final int volumeTargetReps = isStrength ? 6 : 10;
     final int stabilizeReps = isStrength ? 4 : 10;
     final int stabilizeThreshold = isStrength ? 3 : 8;
-    final double weightIncrement = isStrength ? 5.0 : 2.5;
+    final double step = weightStep(exercise);
+    final double weightIncrement = isStrength ? max(5.0, step) : step;
     final String modeLabel = isStrength ? 'STRENGTH' : 'HYPERTROPHY';
 
     // Exclude intra-session warm-up weights: any set below 60 % of that
@@ -402,6 +434,12 @@ class LocalRecommendationEngine {
     final workSets = lastSess.where((s) => s.weight == lastMaxW).toList();
     final lastAvgReps =
         workSets.map((s) => s.reps).reduce((a, b) => a + b) / workSets.length;
+    // Strength graduates on the average; hypertrophy only once every work
+    // set hits the top of the range (e.g. 3×10), so one strong first set
+    // can't carry two weak ones into a heavier weight.
+    final graduated = isStrength
+        ? lastAvgReps >= graduationReps
+        : workSets.every((s) => s.reps >= graduationReps);
     final last1RM = lastSess
         .map((s) => calcOneRM(s.weight, s.reps))
         .reduce(max);
@@ -448,11 +486,11 @@ class LocalRecommendationEngine {
       targetReps = defaultReps;
       baseStatus = 'FORM FOCUS: Repeat weight to nail technique';
     } else if (plateauDetected) {
-      targetWeight = ((lastMaxW * 0.6) / 2.5).round() * 2.5;
+      targetWeight = _roundTo(lastMaxW * 0.6, step);
       targetReps = 15;
       baseStatus =
           'DELOAD: Plateau detected — back off to rebuild work capacity';
-    } else if (lastAvgReps >= graduationReps) {
+    } else if (graduated) {
       targetWeight = lastMaxW + weightIncrement;
       targetReps = defaultReps;
       baseStatus = '$modeLabel PROGRESSION: Weight Increased';
@@ -490,7 +528,7 @@ class LocalRecommendationEngine {
     } else if (momentum < -2.0 && last1RM < baseRequired1RM * threshold) {
       // Declining trend combined with an ambitious target — pull back weight
       // to stay within the safety threshold rather than risk regression/injury.
-      var adjusted = (_workingWeight(last1RM, targetReps) / 2.5).round() * 2.5;
+      var adjusted = _roundTo(_workingWeight(last1RM, targetReps), step);
       if (adjusted <= 0) adjusted = lastMaxW;
       targetWeight = adjusted.toDouble();
       status = 'ML OVERRIDE: Declining trend — weight adjusted for safety';
@@ -703,15 +741,18 @@ class LocalRecommendationEngine {
       ),
     };
 
-    double targetWeight = (rawWeight / 2.5).round() * 2.5;
+    final step = weightStep(exercise);
+    double targetWeight = _roundTo(rawWeight, step);
     if (targetWeight <= 0) targetWeight = lastMaxW;
 
     // Category safety clamp on the Heavy phase only.
     final threshold = _categoryThresholds[category] ?? 0.95;
     double required1RM = targetWeight * (1 + 0.0333 * targetReps);
     if (phaseIndex == 0 && last1RM > 0 && required1RM > last1RM * threshold) {
-      targetWeight =
-          (_workingWeight(last1RM * threshold, targetReps) / 2.5).round() * 2.5;
+      targetWeight = _roundTo(
+        _workingWeight(last1RM * threshold, targetReps),
+        step,
+      );
       required1RM = targetWeight * (1 + 0.0333 * targetReps);
     }
 

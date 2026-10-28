@@ -94,14 +94,14 @@ void main() {
       expect(rec.status, contains('NEW EXERCISE'));
     });
 
-    test('hypertrophy mode defaults to 10 reps and 0 weight', () {
+    test('hypertrophy mode defaults to 8 reps and 0 weight', () {
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Bench Press',
         category: 'Chest',
         allHistory: [],
         mode: TrainingMode.hypertrophy,
       );
-      expect(rec.targetReps, 10);
+      expect(rec.targetReps, 8);
       expect(rec.targetWeight, 0.0);
     });
 
@@ -128,11 +128,11 @@ void main() {
   group('recommend — hypertrophy progression', () {
     final base = DateTime(2026, 1, 1);
 
-    test('increases weight by 2.5 lbs when avg reps >= 12', () {
+    test('increases weight by 2.5 lbs once every work set hits 10', () {
       final history = [
-        ws(base, 'Bench Press', 'Chest', 100, 12),
-        ws(base, 'Bench Press', 'Chest', 100, 12),
-        ws(base, 'Bench Press', 'Chest', 100, 12),
+        ws(base, 'Bench Press', 'Chest', 100, 10),
+        ws(base, 'Bench Press', 'Chest', 100, 10),
+        ws(base, 'Bench Press', 'Chest', 100, 10),
       ];
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Bench Press',
@@ -141,14 +141,30 @@ void main() {
         mode: TrainingMode.hypertrophy,
       );
       expect(rec.targetWeight, 102.5);
-      expect(rec.targetReps, 10);
+      expect(rec.targetReps, 8);
       expect(rec.status, contains('HYPERTROPHY PROGRESSION'));
     });
 
-    test('volume push steps up gradually from last reps, capped at 12', () {
+    test('dumbbell exercises jump 5 lbs after 3×10', () {
       final history = [
+        ws(base, 'Incline Dumbbell Bench Press', 'Chest', 35, 10),
+        ws(base, 'Incline Dumbbell Bench Press', 'Chest', 35, 10),
+        ws(base, 'Incline Dumbbell Bench Press', 'Chest', 35, 10),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Incline Dumbbell Bench Press',
+        category: 'Chest',
+        allHistory: history,
+      );
+      expect(rec.targetWeight, 40.0);
+      expect(rec.targetReps, 8);
+    });
+
+    test('one set short of 10 holds the weight', () {
+      final history = [
+        ws(base, 'Bench Press', 'Chest', 100, 12),
         ws(base, 'Bench Press', 'Chest', 100, 10),
-        ws(base, 'Bench Press', 'Chest', 100, 10),
+        ws(base, 'Bench Press', 'Chest', 100, 9),
       ];
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Bench Press',
@@ -157,15 +173,13 @@ void main() {
         mode: TrainingMode.hypertrophy,
       );
       expect(rec.targetWeight, 100.0);
-      // min(volumeTargetReps=12, lastAvgReps.round()=10 + 1) = 11
-      expect(rec.targetReps, 11);
       expect(rec.status, contains('VOLUME'));
     });
 
-    test('volume push never exceeds the 12-rep ceiling even near it', () {
+    test('volume push steps up gradually from last reps, capped at 10', () {
       final history = [
-        ws(base, 'Bench Press', 'Chest', 100, 11),
-        ws(base, 'Bench Press', 'Chest', 100, 11),
+        ws(base, 'Bench Press', 'Chest', 100, 9),
+        ws(base, 'Bench Press', 'Chest', 100, 8),
       ];
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Bench Press',
@@ -173,8 +187,26 @@ void main() {
         allHistory: history,
         mode: TrainingMode.hypertrophy,
       );
-      // min(12, 11 + 1) = 12
-      expect(rec.targetReps, 12);
+      expect(rec.targetWeight, 100.0);
+      // min(volumeTargetReps=10, lastAvgReps.round()=9 + 1) = 10
+      expect(rec.targetReps, 10);
+      expect(rec.status, contains('VOLUME'));
+    });
+
+    test('volume push never exceeds the 10-rep ceiling even near it', () {
+      final history = [
+        ws(base, 'Bench Press', 'Chest', 100, 11),
+        ws(base, 'Bench Press', 'Chest', 100, 11),
+        ws(base, 'Bench Press', 'Chest', 100, 9),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Bench Press',
+        category: 'Chest',
+        allHistory: history,
+        mode: TrainingMode.hypertrophy,
+      );
+      // min(10, 10 + 1) = 10
+      expect(rec.targetReps, 10);
     });
 
     test('stabilization steps up gradually from last reps, capped at 10', () {
@@ -686,8 +718,8 @@ void main() {
 
     test('a uniform-weight session still picks that weight (regression)', () {
       final history = [
-        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 100, 10),
-        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 100, 10),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 100, 9),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 100, 9),
       ];
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Bench Press',
@@ -700,16 +732,16 @@ void main() {
 
     test('a top single with consistent backoff reps does not falsely trigger '
         'rep-drop stabilization', () {
-      // Whole-session reps [3, 10, 10, 10] would look like a collapse
-      // (min/mean ≈ 0.36 < 0.5) if averaged across weights, but the
+      // Whole-session reps [3, 9, 9, 9] would look like a collapse
+      // (min/mean ≈ 0.4 < 0.5) if averaged across weights, but the
       // backoff sets at the actual working weight (35) are perfectly
       // consistent — this is an intentional top-set-then-backoff
       // structure, not fatigue.
       final history = [
         ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 50, 3),
-        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 10),
-        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 10),
-        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 10),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 9),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 9),
+        ws(DateTime(2026, 1, 1), 'Bench Press', 'Chest', 35, 9),
       ];
       final rec = LocalRecommendationEngine.recommend(
         exercise: 'Bench Press',
@@ -943,7 +975,40 @@ void main() {
         allHistory: history,
       );
       expect(rec.status, isNot(contains('DELOAD')));
-      expect(rec.status, contains('VOLUME'));
+      // 3×10 at 21 graduates under double progression.
+      expect(rec.status, contains('PROGRESSION'));
+    });
+  });
+
+  group('warmupRamp', () {
+    test('dumbbell ramp rounds to 5 lb steps', () {
+      expect(
+        LocalRecommendationEngine.warmupRamp(
+          'Incline Dumbbell Bench Press',
+          40,
+        ),
+        [(20.0, 8), (30.0, 4)],
+      );
+    });
+
+    test('barbell ramp rounds to 2.5 lb steps', () {
+      expect(
+        LocalRecommendationEngine.warmupRamp('Flat Barbell Bench Press', 135),
+        [(67.5, 8), (102.5, 4)],
+      );
+    });
+
+    test('light lifts drop steps that collapse into each other', () {
+      // 50 % of 10 rounds to 5, 75 % rounds to 10 = the working weight.
+      expect(LocalRecommendationEngine.warmupRamp('DB Curl', 10), [(5.0, 8)]);
+    });
+
+    test('no ramp for bodyweight or assisted exercises', () {
+      expect(LocalRecommendationEngine.warmupRamp('Pull Up', 0), isEmpty);
+      expect(
+        LocalRecommendationEngine.warmupRamp('Assisted Pull Up', 50),
+        isEmpty,
+      );
     });
   });
 
