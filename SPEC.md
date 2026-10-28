@@ -6,14 +6,12 @@ Submission: none (personal sprint) · Needs: tagged `demo` commit, release appbu
 Demo: local install on Android device/emulator; Play Store via `flutter build appbundle` · Team: solo + agents
 
 ## Sprint state
-- Phase: 6 (frozen, local demo) · Build mode: sequential · Base branch: sprint/refactor (off main)
-- Resumed: 2026-10-28 17:09 CDT · End: 17:39 CDT · Deploy deferred
-- Merged: T2 dead code, T3 backtest, T4 PR trophy, T5 repeat last workout, History/Calendar set-order + reps-only display fixes
-- Verified on SM-G781U (release APK, Oct 17 FitNotes import, 2305 sets): Log, rec card, assisted rec, Repeat Last Workout, PR trophies, History, Calendar, Progress chart, Settings import
-- Backtest (Oct 17 export): 468 predictions, 80.3% achieved, 11.8% too aggressive, 7.2 lbs mean abs error
+- Phase: 4 (build, wave 2: fixes + FitNotes-style Log UX) · Build mode: parallel worktrees · Base branch: sprint/refactor
+- Resumed: 2026-10-28 17:25 CDT · End: 19:30 CDT · Deploy deferred
+- Merged: T2–T5, set-order fix, log_view split into part files
+- In flight: A fixes (progress axis, default exercise, Sauna repeat) · B Log day nav + inline sets · C exercise page Track/History/Graph · D add-exercise picker
 - Cut: T6 appbundle/release signing (later), T7 plate calculator
-- Known cosmetic: Progress y-axis min/max labels overlap grid labels; default exercise (Ab Crunch Machine) shows empty 3m chart; Repeat Last Workout skips Sauna
-- Next: release keystore + `flutter build appbundle` for Play Store
+- Next: merge A–D through test gate, install on phone, verify UI flows, tag demo
 
 ## Core loop
 Lifter opens app at gym → picks exercise → sees weight/rep recommendation → logs sets → next session's recommendation adapts.
