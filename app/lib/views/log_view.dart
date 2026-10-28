@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/exercise_picker_logic.dart';
 import 'package:repiq/services/rest_timer.dart';
 import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
