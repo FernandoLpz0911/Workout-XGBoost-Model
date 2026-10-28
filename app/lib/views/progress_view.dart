@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:repiq/models/weight_unit.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/progress_defaults.dart';
 import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/utils/date_format.dart';
 import 'package:repiq/viewmodels/log_viewmodel.dart';
@@ -126,7 +127,13 @@ class _ProgressViewState extends State<ProgressView> {
     }
 
     if (_selectedCategory == null || !categories.contains(_selectedCategory)) {
-      _selectedCategory = categories.first;
+      final pick = mostLoggedExercise(vm.history, categories.toSet());
+      if (pick != null && (vm.exerciseDict[pick.$1] ?? []).contains(pick.$2)) {
+        _selectedCategory = pick.$1;
+        _selectedExercise = pick.$2;
+      } else {
+        _selectedCategory = categories.first;
+      }
     }
 
     final exercises = vm.exerciseDict[_selectedCategory] ?? const <String>[];
