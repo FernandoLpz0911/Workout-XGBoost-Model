@@ -38,6 +38,7 @@ List<ChartPoint> computeExerciseSeries(
         s.exercise == exercise &&
         s.weight > 0 &&
         s.reps > 0 &&
+        !s.isWarmup &&
         (cutoff == null || s.date.isAfter(cutoff)),
   );
 

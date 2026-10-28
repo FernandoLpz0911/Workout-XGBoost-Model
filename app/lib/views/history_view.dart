@@ -125,6 +125,7 @@ class ExerciseHistorySection extends StatelessWidget {
   Widget build(BuildContext context) {
     final primary = Theme.of(context).colorScheme.primary;
     final unit = context.watch<UnitsController>().unit;
+    final labels = setLabels(sets, prefixed: true);
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
       child: Column(
@@ -181,8 +182,8 @@ class ExerciseHistorySection extends StatelessWidget {
                   SizedBox(
                     width: 40,
                     child: Text(
-                      '${s.category == 'Cardio' ? 'Lap' : 'Set'} ${i + 1}',
-                      style: const TextStyle(color: Colors.grey, fontSize: 12),
+                      labels[i],
+                      style: setLabelStyle(context, s, fontSize: 12),
                     ),
                   ),
                   const SizedBox(width: 8),

@@ -131,3 +131,46 @@ extension WorkoutSetUnitDisplay on WorkoutSet {
         '${weightUnitLabel(unit)} × $reps';
   }
 }
+
+/// Warm-up sets are stored as a "Warmup" note so they survive a FitNotes CSV
+/// round trip. Recommendations, PRs, charts and set numbering skip them.
+final _warmupPrefix = RegExp(
+  r'^\s*warm[\s-]?up\b[\s:,\-]*',
+  caseSensitive: false,
+);
+
+/// True when [comment] marks a warm-up set ("Warmup", "warm up", "warm-up").
+bool isWarmupComment(String comment) {
+  final s = comment.toLowerCase();
+  return s.contains('warmup') || s.contains('warm up') || s.contains('warm-up');
+}
+
+/// Builds the stored comment for a set from its user [note] and warm-up flag.
+String withWarmupTag(String note, bool warmup) {
+  final n = note.trim();
+  if (!warmup || isWarmupComment(n)) return n;
+  return n.isEmpty ? 'Warmup' : 'Warmup: $n';
+}
+
+/// The user's note with a leading warm-up tag removed.
+String stripWarmupTag(String comment) =>
+    comment.replaceFirst(_warmupPrefix, '').trim();
+
+/// Row labels for one exercise's sets in a day: "W" for warm-ups and a
+/// running number (or "Lap n" / "Set n" when [prefixed]) for work sets.
+List<String> setLabels(List<WorkoutSet> sets, {bool prefixed = false}) {
+  var n = 0;
+  return [
+    for (final s in sets)
+      if (isWarmupComment(s.comment))
+        'W'
+      else
+        prefixed
+            ? '${s.category == 'Cardio' ? 'Lap' : 'Set'} ${++n}'
+            : '${++n}',
+  ];
+}
+
+extension WorkoutSetWarmup on WorkoutSet {
+  bool get isWarmup => isWarmupComment(comment);
+}

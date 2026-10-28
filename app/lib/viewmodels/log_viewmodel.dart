@@ -94,7 +94,7 @@ class SessionExercise {
 /// through [LocalStorageService]; recommendations are computed via
 /// [LocalRecommendationEngine] in a [compute] isolate.
 class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
-  final _storage = LocalStorageService();
+  final LocalStorageService _storage;
 
   Map<String, List<String>> exerciseDict = {};
   bool isDictLoading = true;
@@ -237,7 +237,9 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     'Back Extension',
   };
 
-  LogViewModel() {
+  /// [storage] defaults to the on-disk app DB; tests pass a throwaway one.
+  LogViewModel({LocalStorageService? storage})
+    : _storage = storage ?? LocalStorageService() {
     WidgetsBinding.instance.addObserver(this);
     _initialize();
   }

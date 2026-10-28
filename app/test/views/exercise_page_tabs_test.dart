@@ -1,10 +1,14 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
+import 'package:repiq/services/local_storage_service.dart';
 import 'package:repiq/services/rest_timer.dart';
 import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
@@ -30,7 +34,11 @@ void main() {
       'last_notif_day': LogViewModel.fmtDate(DateTime.now()),
     });
     await tester.runAsync(() async {
-      vm = LogViewModel();
+      // A fresh DB per test so sets logged earlier aren't restored.
+      final dir = Directory.systemTemp.createTempSync('repiq_test');
+      vm = LogViewModel(
+        storage: LocalStorageService(dbPath: join(dir.path, 'repiq.db')),
+      );
       while (vm.isDictLoading) {
         await Future<void>.delayed(const Duration(milliseconds: 10));
       }
@@ -119,5 +127,31 @@ void main() {
     await tester.tap(find.text('CLEAR'));
     await tester.pump();
     expect(find.text('SAVE'), findsOneWidget);
+  });
+
+  testWidgets('warm-up chip fills a flagged warm-up; Use clears it', (
+    tester,
+  ) async {
+    await pumpExercisePage(tester);
+    expect(find.text('Warm-up:'), findsOneWidget);
+    expect(find.text('15 × 8'), findsOneWidget);
+    expect(find.text('22.5 × 4'), findsOneWidget);
+
+    await tester.tap(find.text('15 × 8'));
+    await tester.pump();
+    expect(find.text('15.0'), findsOneWidget);
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      isTrue,
+    );
+
+    // Use goes back to the work-set suggestion and clears the flag.
+    await tester.tap(find.text('Use'));
+    await tester.pump();
+    expect(find.text('30.0'), findsOneWidget);
+    expect(
+      tester.widget<SwitchListTile>(find.byType(SwitchListTile)).value,
+      isFalse,
+    );
   });
 }

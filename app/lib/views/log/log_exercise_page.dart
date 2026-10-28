@@ -72,6 +72,7 @@ class _TrackTabState extends State<_TrackTab>
   final _durCtrl = TextEditingController();
   String _distUnit = 'mi';
   final _noteCtrl = TextEditingController();
+  bool _warmup = false;
   bool _initialized = false;
 
   /// Index into the exercise's logged sets being edited, or null when
@@ -101,6 +102,17 @@ class _TrackTabState extends State<_TrackTab>
       _distCtrl.clear();
       _durCtrl.clear();
       _noteCtrl.clear();
+      _warmup = false;
+    });
+  }
+
+  /// Fills the steppers with one warm-up ramp step and flags it as a warm-up.
+  void _useWarmup(double weight, int reps) {
+    setState(() {
+      _editingIndex = null;
+      _weight = weight;
+      _reps = reps;
+      _warmup = true;
     });
   }
 
@@ -112,7 +124,8 @@ class _TrackTabState extends State<_TrackTab>
       _distCtrl.text = s.distance != null ? s.distance!.toStringAsFixed(2) : '';
       _distUnit = s.distanceUnit ?? 'mi';
       _durCtrl.text = s.duration ?? '';
-      _noteCtrl.text = s.comment;
+      _warmup = s.isWarmup;
+      _noteCtrl.text = _warmup ? stripWarmupTag(s.comment) : s.comment;
     });
   }
 
@@ -145,7 +158,7 @@ class _TrackTabState extends State<_TrackTab>
           category: ex.category,
           weight: _weight,
           reps: _reps,
-          comment: _noteCtrl.text.trim(),
+          comment: withWarmupTag(_noteCtrl.text, _warmup),
         );
       case ExerciseType.cardio:
         return WorkoutSet(
@@ -155,7 +168,7 @@ class _TrackTabState extends State<_TrackTab>
           distance: double.parse(_distCtrl.text),
           distanceUnit: _distUnit,
           duration: _durCtrl.text.trim(),
-          comment: _noteCtrl.text.trim(),
+          comment: withWarmupTag(_noteCtrl.text, _warmup),
         );
       case ExerciseType.passive:
         return WorkoutSet(
@@ -163,7 +176,7 @@ class _TrackTabState extends State<_TrackTab>
           exercise: ex.exercise,
           category: ex.category,
           duration: _durCtrl.text.trim(),
-          comment: _noteCtrl.text.trim(),
+          comment: withWarmupTag(_noteCtrl.text, _warmup),
         );
     }
   }
@@ -177,12 +190,22 @@ class _TrackTabState extends State<_TrackTab>
         editing,
         _buildSet(ex, type, ex.sets[editing].date),
       );
-      setState(() => _editingIndex = null);
+      setState(() {
+        _editingIndex = null;
+        _warmup = false;
+      });
       _noteCtrl.clear();
       return;
     }
     vm.logSet(widget.exerciseIndex, _buildSet(ex, type, DateTime.now()));
     _noteCtrl.clear();
+    // A warm-up is a one-off: go back to the work-set suggestion.
+    if (_warmup) {
+      setState(() {
+        _warmup = false;
+        _useSuggestion(ex);
+      });
+    }
     final timer = context.read<RestTimer>();
     if (timer.autoStartEnabled) timer.start();
   }
@@ -200,6 +223,7 @@ class _TrackTabState extends State<_TrackTab>
         final type = exerciseTypeOf(ex.category);
         final units = context.watch<UnitsController>();
         final editing = _editingIndex != null;
+        final labels = setLabels(ex.sets);
 
         return ListView(
           padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
@@ -212,7 +236,11 @@ class _TrackTabState extends State<_TrackTab>
               const SizedBox(height: 12),
               _SuggestionLine(
                 ex: ex,
-                onUse: () => setState(() => _useSuggestion(ex)),
+                onUse: () => setState(() {
+                  _warmup = false;
+                  _useSuggestion(ex);
+                }),
+                onWarmup: _useWarmup,
               ),
               const SizedBox(height: 12),
             ] else ...[
@@ -230,7 +258,15 @@ class _TrackTabState extends State<_TrackTab>
                       ..._buildCardioInputs()
                     else
                       ..._buildPassiveInputs(),
-                    const SizedBox(height: 20),
+                    if (type == ExerciseType.strength) ...[
+                      const SizedBox(height: 12),
+                      _WarmupSwitch(
+                        value: _warmup,
+                        onChanged: (v) => setState(() => _warmup = v),
+                      ),
+                      const SizedBox(height: 8),
+                    ] else
+                      const SizedBox(height: 20),
                     TextField(
                       controller: _noteCtrl,
                       decoration: const InputDecoration(
@@ -306,7 +342,7 @@ class _TrackTabState extends State<_TrackTab>
                         .entries
                         .map(
                           (e) => _SetRow(
-                            setNum: e.key + 1,
+                            label: labels[e.key],
                             set: e.value,
                             selected: _editingIndex == e.key,
                             onTap: () => _loadSet(e.key, e.value),
@@ -412,7 +448,12 @@ class _TrackTabState extends State<_TrackTab>
 class _SuggestionLine extends StatelessWidget {
   final SessionExercise ex;
   final VoidCallback onUse;
-  const _SuggestionLine({required this.ex, required this.onUse});
+  final void Function(double weight, int reps) onWarmup;
+  const _SuggestionLine({
+    required this.ex,
+    required this.onUse,
+    required this.onWarmup,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -426,6 +467,10 @@ class _SuggestionLine extends StatelessWidget {
     final rec = ex.recommendation;
     if (rec == null) return const SizedBox.shrink();
     final units = context.watch<UnitsController>();
+    final ramp = LocalRecommendationEngine.warmupRamp(
+      ex.exercise,
+      rec.targetWeight,
+    );
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -448,6 +493,29 @@ class _SuggestionLine extends StatelessWidget {
           rec.status,
           style: const TextStyle(fontSize: 12, color: Colors.grey),
         ),
+        if (ramp.isNotEmpty) ...[
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              const Text(
+                'Warm-up:',
+                style: TextStyle(fontSize: 13, color: Colors.grey),
+              ),
+              for (final (w, r) in ramp)
+                ActionChip(
+                  label: Text(
+                    '${_fmtWeight(units.toDisplay(w))} × $r',
+                    style: const TextStyle(fontSize: 13),
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  onPressed: () => onWarmup(w, r),
+                ),
+            ],
+          ),
+        ],
         if (rec.notesInsight.isNotEmpty) ...[
           const SizedBox(height: 8),
           _InfoChip(
@@ -457,6 +525,31 @@ class _SuggestionLine extends StatelessWidget {
           ),
         ],
       ],
+    );
+  }
+}
+
+String _fmtWeight(double w) =>
+    w == w.roundToDouble() ? w.toStringAsFixed(0) : w.toStringAsFixed(1);
+
+/// "Warm-up set" switch shown above the note field for strength exercises.
+class _WarmupSwitch extends StatelessWidget {
+  final bool value;
+  final ValueChanged<bool> onChanged;
+  const _WarmupSwitch({required this.value, required this.onChanged});
+
+  @override
+  Widget build(BuildContext context) {
+    return SwitchListTile(
+      value: value,
+      onChanged: onChanged,
+      dense: true,
+      contentPadding: EdgeInsets.zero,
+      title: const Text('Warm-up set'),
+      subtitle: const Text(
+        'Not counted toward suggestions, PRs or graphs',
+        style: TextStyle(fontSize: 12),
+      ),
     );
   }
 }
@@ -510,13 +603,13 @@ class _InfoChip extends StatelessWidget {
 
 /// One logged set row: set number, display text, PR badge; tap to edit.
 class _SetRow extends StatelessWidget {
-  final int setNum;
+  final String label;
   final WorkoutSet set;
   final bool selected;
   final VoidCallback onTap;
   final VoidCallback onDelete;
   const _SetRow({
-    required this.setNum,
+    required this.label,
     required this.set,
     required this.selected,
     required this.onTap,
@@ -538,8 +631,8 @@ class _SetRow extends StatelessWidget {
             SizedBox(
               width: 28,
               child: Text(
-                '$setNum',
-                style: const TextStyle(color: Colors.grey, fontSize: 13),
+                label,
+                style: setLabelStyle(context, set, fontSize: 13),
               ),
             ),
             Text(
@@ -596,6 +689,7 @@ class _LogSetDialogState extends State<_LogSetDialog> {
   final _durCtrl = TextEditingController();
   String _distUnit = 'mi';
   final _noteCtrl = TextEditingController();
+  bool _warmup = false;
 
   ExerciseType get _type => exerciseTypeOf(widget.category);
 
@@ -611,7 +705,10 @@ class _LogSetDialogState extends State<_LogSetDialog> {
           : '';
       _distUnit = existing.distanceUnit ?? 'mi';
       _durCtrl.text = existing.duration ?? '';
-      _noteCtrl.text = existing.comment;
+      _warmup = existing.isWarmup;
+      _noteCtrl.text = _warmup
+          ? stripWarmupTag(existing.comment)
+          : existing.comment;
     } else {
       final rec = widget.recommendation;
       _weight = rec?.targetWeight ?? 0.0;
@@ -653,6 +750,11 @@ class _LogSetDialogState extends State<_LogSetDialog> {
             if (_type == ExerciseType.cardio) ..._cardioFields(),
             if (_type == ExerciseType.passive) ..._passiveFields(),
             const SizedBox(height: 16),
+            if (_type == ExerciseType.strength)
+              _WarmupSwitch(
+                value: _warmup,
+                onChanged: (v) => setState(() => _warmup = v),
+              ),
             TextField(
               controller: _noteCtrl,
               decoration: const InputDecoration(
@@ -769,7 +871,7 @@ class _LogSetDialogState extends State<_LogSetDialog> {
           category: widget.category,
           weight: _weight,
           reps: _reps,
-          comment: _noteCtrl.text.trim(),
+          comment: withWarmupTag(_noteCtrl.text, _warmup),
         );
       case ExerciseType.cardio:
         set = WorkoutSet(
@@ -779,7 +881,7 @@ class _LogSetDialogState extends State<_LogSetDialog> {
           distance: double.parse(_distCtrl.text),
           distanceUnit: _distUnit,
           duration: _durCtrl.text.trim(),
-          comment: _noteCtrl.text.trim(),
+          comment: withWarmupTag(_noteCtrl.text, _warmup),
         );
       case ExerciseType.passive:
         set = WorkoutSet(
@@ -787,7 +889,7 @@ class _LogSetDialogState extends State<_LogSetDialog> {
           exercise: widget.exercise,
           category: widget.category,
           duration: _durCtrl.text.trim(),
-          comment: _noteCtrl.text.trim(),
+          comment: withWarmupTag(_noteCtrl.text, _warmup),
         );
     }
     widget.onSave(set);

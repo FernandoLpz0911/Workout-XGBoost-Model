@@ -279,4 +279,56 @@ void main() {
       expect(WorkoutSet.fmtDateStatic(DateTime(2026, 11, 20)), '2026-11-20');
     });
   });
+
+  group('warm-up tag', () {
+    WorkoutSet set(String comment, {String category = 'Chest'}) => WorkoutSet(
+      date: DateTime(2026, 10, 28),
+      exercise: 'Incline Dumbbell Bench Press',
+      category: category,
+      weight: 20,
+      reps: 8,
+      comment: comment,
+    );
+
+    test('withWarmupTag adds the tag only when flagged', () {
+      expect(withWarmupTag('', true), 'Warmup');
+      expect(withWarmupTag(' shoulder tight ', true), 'Warmup: shoulder tight');
+      expect(withWarmupTag('felt good', false), 'felt good');
+      expect(withWarmupTag('Warm up set', true), 'Warm up set');
+    });
+
+    test('stripWarmupTag recovers the note', () {
+      expect(stripWarmupTag('Warmup'), '');
+      expect(stripWarmupTag('Warmup: shoulder tight'), 'shoulder tight');
+      expect(stripWarmupTag('warm-up - light'), 'light');
+      expect(stripWarmupTag('Warm up, height is now 13'), 'height is now 13');
+    });
+
+    test('tag round-trips through CSV comment text', () {
+      final tagged = withWarmupTag('easy', true);
+      expect(isWarmupComment(tagged), isTrue);
+      expect(stripWarmupTag(tagged), 'easy');
+    });
+
+    test('setLabels marks warm-ups W and numbers only work sets', () {
+      final sets = [
+        set('Warmup'),
+        set('warm up'),
+        set(''),
+        set('note'),
+        set(''),
+      ];
+      expect(setLabels(sets), ['W', 'W', '1', '2', '3']);
+      expect(setLabels(sets, prefixed: true), [
+        'W',
+        'W',
+        'Set 1',
+        'Set 2',
+        'Set 3',
+      ]);
+      expect(setLabels([set('', category: 'Cardio')], prefixed: true), [
+        'Lap 1',
+      ]);
+    });
+  });
 }

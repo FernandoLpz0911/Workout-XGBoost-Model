@@ -368,6 +368,7 @@ class _ProgressViewState extends State<ProgressView> {
     final perDay = <String, _DayAgg>{};
     for (final s in history) {
       if (cutoff != null && !s.date.isAfter(cutoff)) continue;
+      if (s.isWarmup) continue;
       final day = DateTime(s.date.year, s.date.month, s.date.day);
       final key = WorkoutSet.fmtDateStatic(day);
       final agg = perDay.putIfAbsent(key, () => _DayAgg(day));

@@ -148,12 +148,7 @@ class LocalRecommendationEngine {
         s.contains('no rest');
   }
 
-  static bool isWarmup(String c) {
-    final s = c.toLowerCase();
-    return s.contains('warmup') ||
-        s.contains('warm up') ||
-        s.contains('warm-up');
-  }
+  static bool isWarmup(String c) => isWarmupComment(c);
 
   /// True for assistance-machine exercises (e.g. "Assisted Pull Up"), where
   /// the tracked weight is assistance provided rather than load lifted —

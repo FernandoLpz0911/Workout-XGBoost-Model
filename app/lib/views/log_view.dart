@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import 'package:repiq/models/recommendation_models.dart';
 import 'package:repiq/models/workout_set.dart';
 import 'package:repiq/services/exercise_picker_logic.dart';
+import 'package:repiq/services/local_recommendation_engine.dart';
 import 'package:repiq/services/rest_timer.dart';
 import 'package:repiq/services/units_controller.dart';
 import 'package:repiq/theme/app_theme.dart';
@@ -247,6 +248,7 @@ class _ExerciseCard extends StatelessWidget {
     final unit = context.watch<UnitsController>().unit;
     final cs = Theme.of(context).colorScheme;
     const grey = TextStyle(color: Colors.grey, fontSize: 13);
+    final labels = setLabels(ex.sets, prefixed: true);
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       clipBehavior: Clip.antiAlias,
@@ -307,8 +309,12 @@ class _ExerciseCard extends StatelessWidget {
                     child: Row(
                       children: [
                         Text(
-                          '${ex.sets[n].category == 'Cardio' ? 'Lap' : 'Set'} ${n + 1}',
-                          style: grey,
+                          labels[n],
+                          style: setLabelStyle(
+                            context,
+                            ex.sets[n],
+                            fontSize: 13,
+                          ),
                         ),
                         const SizedBox(width: 12),
                         Flexible(

@@ -213,6 +213,7 @@ class ExerciseHistoryTab extends StatelessWidget {
             final day = days[i];
             final daySets = byDay[day]!
               ..sort((a, b) => a.date.compareTo(b.date));
+            final labels = setLabels(daySets, prefixed: true);
             return Card(
               margin: const EdgeInsets.only(bottom: 12),
               child: Padding(
@@ -229,7 +230,7 @@ class ExerciseHistoryTab extends StatelessWidget {
                     ),
                     const SizedBox(height: 8),
                     ...daySets.asMap().entries.map((entry) {
-                      final n = entry.key + 1;
+                      final label = labels[entry.key];
                       final s = entry.value;
                       return Padding(
                         padding: const EdgeInsets.symmetric(vertical: 3),
@@ -238,11 +239,8 @@ class ExerciseHistoryTab extends StatelessWidget {
                             SizedBox(
                               width: 44,
                               child: Text(
-                                '${s.category == 'Cardio' ? 'Lap' : 'Set'} $n',
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
+                                label,
+                                style: setLabelStyle(context, s, fontSize: 12),
                               ),
                             ),
                             Text(
