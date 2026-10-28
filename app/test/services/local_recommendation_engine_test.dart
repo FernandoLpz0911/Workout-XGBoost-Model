@@ -827,6 +827,43 @@ void main() {
       expect(rec.status, contains('FORM FOCUS'));
     });
 
+    test('recovering from a dip is not a plateau', () {
+      // 35 → 25 → 30 → 35 lbs × 10: the window's first and best e1RM match,
+      // but the last 3 sessions are climbing hard, so no deload.
+      final base = DateTime(2026, 1, 1);
+      final history = [
+        ws(base, 'Incline Press', 'Chest', 35.0, 10),
+        ws(
+          base.add(const Duration(days: 7)),
+          'Incline Press',
+          'Chest',
+          25.0,
+          10,
+        ),
+        ws(
+          base.add(const Duration(days: 14)),
+          'Incline Press',
+          'Chest',
+          30.0,
+          10,
+        ),
+        ws(
+          base.add(const Duration(days: 21)),
+          'Incline Press',
+          'Chest',
+          35.0,
+          10,
+        ),
+      ];
+      final rec = LocalRecommendationEngine.recommend(
+        exercise: 'Incline Press',
+        category: 'Chest',
+        allHistory: history,
+      );
+      expect(rec.status, isNot(contains('DELOAD')));
+      expect(rec.notesInsight, isNot(contains('No 1RM gain')));
+    });
+
     test('three sessions does not trigger plateau even with stable 1RM', () {
       final base = DateTime(2026, 1, 1);
       final history = [

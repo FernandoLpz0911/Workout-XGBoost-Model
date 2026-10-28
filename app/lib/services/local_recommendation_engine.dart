@@ -433,8 +433,14 @@ class LocalRecommendationEngine {
     int targetReps;
     String baseStatus;
 
+    // A dip followed by a climb back to the window's start reads as "no
+    // gain" to _isPlateaued, but deloading someone who is visibly climbing
+    // again is wrong. Same bar as the "Strong momentum" insight below, scaled
+    // down for light lifts where 5 lbs/session is a lot.
+    final climbing = momentum > min(5.0, last1RM * 0.02);
     final plateauDetected =
         workingSessions.length >= 4 &&
+        !climbing &&
         _isPlateaued(workingSessions.sublist(workingSessions.length - 4));
 
     if (hadFormIssue) {
