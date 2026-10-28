@@ -6,12 +6,12 @@ Submission: none (personal sprint) · Needs: tagged `demo` commit, release appbu
 Demo: local install on Android device/emulator; Play Store via `flutter build appbundle` · Team: solo + agents
 
 ## Sprint state
-- Phase: 4 (build, wave 2: fixes + FitNotes-style Log UX) · Build mode: parallel worktrees · Base branch: sprint/refactor
+- Phase: 5 (verify done; history rewrite + tag) · Build mode: parallel worktrees · Base branch: sprint/refactor
 - Resumed: 2026-10-28 17:25 CDT · End: 19:30 CDT · Deploy deferred
-- Merged: T2–T5, set-order fix, log_view split into part files
-- In flight: A fixes (progress axis, default exercise, Sauna repeat) · B Log day nav + inline sets · C exercise page Track/History/Graph · D add-exercise picker
+- Merged: T2–T5, set-order fix, log_view split, A (progress axis/default, Sauna repeat test), B (Log day nav + inline sets), C (exercise page Track/History/Graph), D (add-exercise picker), plateau-vs-momentum fix
+- Verified on phone: day nav/swipe, past day inline sets + PR badge, exercise tabs, picker recent+search, Progress default + axis, repeat incl. Sauna
 - Cut: T6 appbundle/release signing (later), T7 plate calculator
-- Next: merge A–D through test gate, install on phone, verify UI flows, tag demo
+- Next: rewrite history to drop Claude author/trailers, force-push main + sprint/refactor, retag demo
 
 ## Core loop
 Lifter opens app at gym → picks exercise → sees weight/rep recommendation → logs sets → next session's recommendation adapts.
