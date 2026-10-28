@@ -31,72 +31,39 @@ class LogView extends StatelessWidget {
         return Scaffold(
           body: Column(
             children: [
+              _DayNavHeader(vm: vm),
               Padding(
                 padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
                 child: DayMetaBanner(
-                  dateKey: LogViewModel.fmtDate(DateTime.now()),
+                  dateKey: LogViewModel.fmtDate(vm.selectedDate),
                 ),
               ),
               Expanded(
-                child: vm.session.isEmpty
-                    ? _EmptySessionView(
-                        onAdd: () => _showAddExercise(context, vm),
-                        onRepeat: vm.canRepeatLastWorkout
-                            ? vm.repeatLastWorkout
-                            : null,
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
-                        itemCount: vm.session.length,
-                        itemBuilder: (context, i) {
-                          final ex = vm.session[i];
-                          final setCount = ex.sets.length;
-                          final cs = Theme.of(context).colorScheme;
-                          return Card(
-                            margin: const EdgeInsets.only(bottom: 10),
-                            child: ListTile(
-                              leading: IconAvatar(
-                                icon: _exerciseIcon(
-                                  exerciseTypeOf(ex.category),
-                                ),
-                                color: cs.secondary,
-                              ),
-                              title: Text(
-                                ex.exercise,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 16,
-                                ),
-                              ),
-                              subtitle: Text(
-                                setCount == 0
-                                    ? ex.category
-                                    : '${ex.category}  ·  $setCount ${setCount == 1 ? "set" : "sets"}',
-                                style: const TextStyle(
-                                  color: Colors.grey,
-                                  fontSize: 12,
-                                ),
-                              ),
-                              trailing: IconButton(
-                                icon: const Icon(
-                                  Icons.close,
-                                  color: Colors.grey,
-                                  size: 20,
-                                ),
-                                tooltip: 'Remove exercise',
-                                onPressed: () => _confirmRemove(context, vm, i),
-                              ),
-                              onTap: () => Navigator.push(
-                                context,
-                                MaterialPageRoute(
-                                  builder: (_) =>
-                                      _ExerciseDetailPage(exerciseIndex: i),
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      ),
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onHorizontalDragEnd: (d) {
+                    final v = d.primaryVelocity ?? 0;
+                    if (v > 300) {
+                      vm.previousDay();
+                    } else if (v < -300) {
+                      vm.nextDay();
+                    }
+                  },
+                  child: vm.session.isEmpty
+                      ? _EmptySessionView(
+                          date: vm.selectedDate,
+                          onAdd: () => _showAddExercise(context, vm),
+                          onRepeat: vm.canRepeatLastWorkout
+                              ? vm.repeatLastWorkout
+                              : null,
+                        )
+                      : ListView.builder(
+                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                          itemCount: vm.session.length,
+                          itemBuilder: (context, i) =>
+                              _ExerciseCard(vm: vm, index: i),
+                        ),
+                ),
               ),
             ],
           ),
@@ -155,13 +122,18 @@ class LogView extends StatelessWidget {
 
 /// Shown when no exercises have been added for the current day.
 class _EmptySessionView extends StatelessWidget {
+  final DateTime date;
   final VoidCallback onAdd;
   final VoidCallback? onRepeat;
-  const _EmptySessionView({required this.onAdd, this.onRepeat});
+  const _EmptySessionView({
+    required this.date,
+    required this.onAdd,
+    this.onRepeat,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final now = DateTime.now();
+    final now = date;
     final dateStr = '${_weekday(now.weekday)}, ${_month(now.month)} ${now.day}';
     return Center(
       child: Column(
@@ -205,6 +177,156 @@ class _EmptySessionView extends StatelessWidget {
             ),
           ],
         ],
+      ),
+    );
+  }
+}
+
+/// Header row: previous-day arrow, tappable date label, next-day arrow.
+class _DayNavHeader extends StatelessWidget {
+  final LogViewModel vm;
+  const _DayNavHeader({required this.vm});
+
+  @override
+  Widget build(BuildContext context) {
+    final d = vm.selectedDate;
+    final year = d.year == DateTime.now().year ? '' : ', ${d.year}';
+    final label = vm.isToday
+        ? 'Today'
+        : '${_weekday(d.weekday)}, ${_month(d.month)} ${d.day}$year';
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(8, 4, 8, 0),
+      child: Row(
+        children: [
+          IconButton(
+            icon: const Icon(Icons.chevron_left),
+            tooltip: 'Previous day',
+            onPressed: vm.previousDay,
+          ),
+          Expanded(
+            child: TextButton(
+              onPressed: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: d,
+                  firstDate: DateTime(2000),
+                  lastDate: DateTime.now().add(const Duration(days: 365)),
+                );
+                if (picked != null) vm.selectDate(picked);
+              },
+              child: Text(
+                label,
+                style: const TextStyle(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.chevron_right),
+            tooltip: 'Next day',
+            onPressed: vm.nextDay,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Exercise card with its logged sets listed inline, one compact row per set.
+class _ExerciseCard extends StatelessWidget {
+  final LogViewModel vm;
+  final int index;
+  const _ExerciseCard({required this.vm, required this.index});
+
+  @override
+  Widget build(BuildContext context) {
+    final ex = vm.session[index];
+    final unit = context.watch<UnitsController>().unit;
+    final cs = Theme.of(context).colorScheme;
+    const grey = TextStyle(color: Colors.grey, fontSize: 13);
+    return Card(
+      margin: const EdgeInsets.only(bottom: 10),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => _ExerciseDetailPage(exerciseIndex: index),
+          ),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 4, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  IconAvatar(
+                    icon: LogView._exerciseIcon(exerciseTypeOf(ex.category)),
+                    color: cs.secondary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          ex.exercise,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        Text(
+                          ex.category,
+                          style: const TextStyle(
+                            color: Colors.grey,
+                            fontSize: 12,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.grey, size: 20),
+                    tooltip: 'Remove exercise',
+                    onPressed: () => LogView._confirmRemove(context, vm, index),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              if (ex.sets.isEmpty)
+                const Text('No sets yet', style: grey)
+              else
+                for (var n = 0; n < ex.sets.length; n++)
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 2),
+                    child: Row(
+                      children: [
+                        Text(
+                          '${ex.sets[n].category == 'Cardio' ? 'Lap' : 'Set'} ${n + 1}',
+                          style: grey,
+                        ),
+                        const SizedBox(width: 12),
+                        Flexible(
+                          child: Text(
+                            ex.sets[n].displayTextIn(unit),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 14,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        PrBadge(set: ex.sets[n]),
+                      ],
+                    ),
+                  ),
+            ],
+          ),
+        ),
       ),
     );
   }

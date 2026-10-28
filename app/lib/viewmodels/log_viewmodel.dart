@@ -298,7 +298,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     await _seedPlateauBreakerAlgorithmsIfNeeded();
     await _loadDayMetadata();
     _rebuildDict();
-    _loadTodaySession();
+    _reloadSelectedSession();
     isDictLoading = false;
     notifyListeners();
   }
@@ -414,6 +414,60 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     );
   }
 
+  /// The day shown on the Log tab (date only, midnight). Defaults to today.
+  DateTime selectedDate = _dateOnly(DateTime.now());
+
+  static DateTime _dateOnly(DateTime d) => DateTime(d.year, d.month, d.day);
+
+  /// Whether [selectedDate] is the current calendar day.
+  bool get isToday => _fmtDate(selectedDate) == _fmtDate(DateTime.now());
+
+  void selectDate(DateTime date) {
+    selectedDate = _dateOnly(date);
+    if (isToday) {
+      _loadTodaySession();
+    } else {
+      _loadPastSession(selectedDate);
+    }
+    notifyListeners();
+  }
+
+  void _reloadSelectedSession() =>
+      isToday ? _loadTodaySession() : _loadPastSession(selectedDate);
+
+  void previousDay() => selectDate(
+    DateTime(selectedDate.year, selectedDate.month, selectedDate.day - 1),
+  );
+
+  void nextDay() => selectDate(
+    DateTime(selectedDate.year, selectedDate.month, selectedDate.day + 1),
+  );
+
+  /// Rebuilds [session] from the sets logged on [day] (no recommendations).
+  void _loadPastSession(DateTime day) {
+    session.clear();
+    final key = _fmtDate(day);
+    final sets = history.where((s) => _fmtDate(s.date) == key).toList()
+      ..sort((a, b) => a.date.compareTo(b.date));
+    for (final s in sets) {
+      var idx = session.indexWhere(
+        (e) => e.exercise == s.exercise && e.category == s.category,
+      );
+      if (idx == -1) {
+        session.add(
+          SessionExercise(
+            exercise: s.exercise,
+            category: s.category,
+            trainingMode: trainingModeFor(s.exercise),
+            progressionAlgorithm: progressionAlgorithmFor(s.exercise),
+          ),
+        );
+        idx = session.length - 1;
+      }
+      session[idx].sets.add(s);
+    }
+  }
+
   void _loadTodaySession() {
     session.clear();
     final today = _fmtDate(DateTime.now());
@@ -475,6 +529,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _saveSessionOrder() async {
+    if (!isToday) return;
     final prefs = _prefs ??= await SharedPreferences.getInstance();
     final today = _fmtDate(DateTime.now());
     final order = session.map((e) => '${e.exercise}|||${e.category}').toList();
@@ -561,6 +616,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Whether there is an earlier workout [repeatLastWorkout] can copy.
   bool get canRepeatLastWorkout {
+    if (!isToday) return false;
     final today = _fmtDate(DateTime.now());
     return history.any((s) => _fmtDate(s.date) != today);
   }
@@ -569,6 +625,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   /// session, each with a fresh recommendation. Sets are not copied, since a
   /// logged set means it was actually done.
   void repeatLastWorkout() {
+    if (!isToday) return;
     for (final (category, exercise) in lastWorkoutExercises(
       history,
       DateTime.now(),
@@ -582,6 +639,29 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void logSet(int exerciseIndex, WorkoutSet set) {
+    if (!isToday && _fmtDate(set.date) != _fmtDate(selectedDate)) {
+      final t = set.date;
+      set = WorkoutSet(
+        date: DateTime(
+          selectedDate.year,
+          selectedDate.month,
+          selectedDate.day,
+          t.hour,
+          t.minute,
+          t.second,
+          t.millisecond,
+          t.microsecond,
+        ),
+        exercise: set.exercise,
+        category: set.category,
+        weight: set.weight,
+        reps: set.reps,
+        distance: set.distance,
+        distanceUnit: set.distanceUnit,
+        duration: set.duration,
+        comment: set.comment,
+      );
+    }
     session[exerciseIndex].sets.add(set);
     history.insert(0, set);
     _invalidateHistoryCache();
@@ -715,7 +795,7 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
       final count = await _storage.importFromCsvText(csvText);
       await _loadHistory();
       _rebuildDict();
-      _loadTodaySession();
+      _reloadSelectedSession();
       lastActionMessage = count > 0
           ? 'Imported $count sets from CSV.'
           : 'No new sets found — everything in that file is already imported.';
