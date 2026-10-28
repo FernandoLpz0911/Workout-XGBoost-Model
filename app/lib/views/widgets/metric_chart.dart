@@ -94,9 +94,12 @@ class MetricChart extends StatelessWidget {
     final values = data.map((p) => p.value).toList();
     final trend = _trendSpots(values);
     final allValues = [...values, ...trend.map((s) => s.y)];
-    final minY = allValues.reduce(min) * 0.95;
-    final rawMaxY = allValues.reduce(max) * 1.05;
-    final maxY = rawMaxY > minY ? rawMaxY : minY + 1;
+    final lo = allValues.reduce(min) * 0.95;
+    final hi = allValues.reduce(max) * 1.05;
+    final step = _niceStep((hi > lo ? hi - lo : 1) / 4);
+    final minY = (lo / step).floor() * step;
+    var maxY = (hi / step).ceil() * step;
+    if (maxY <= minY) maxY = minY + step;
     final spots = data
         .asMap()
         .entries
@@ -109,7 +112,7 @@ class MetricChart extends StatelessWidget {
         maxY: maxY,
         gridData: FlGridData(
           drawVerticalLine: false,
-          horizontalInterval: (maxY - minY) / 4,
+          horizontalInterval: step,
           getDrawingHorizontalLine: (_) =>
               FlLine(color: palette.chartGridLine, strokeWidth: 1),
         ),
@@ -125,6 +128,7 @@ class MetricChart extends StatelessWidget {
             sideTitles: SideTitles(
               showTitles: true,
               reservedSize: 52,
+              interval: step,
               getTitlesWidget: (val, _) => Text(
                 axisLabel(val),
                 style: const TextStyle(color: Colors.grey, fontSize: 11),
@@ -212,6 +216,23 @@ class MetricChart extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  /// Rounds [raw] up to 1, 2, 2.5, 5 or 10 times a power of ten so axis
+  /// bounds and labels land on evenly spaced round numbers.
+  static double _niceStep(double raw) {
+    final mag = pow(10, (log(raw) / ln10).floor()).toDouble();
+    final f = raw / mag;
+    final n = f <= 1
+        ? 1
+        : f <= 2
+        ? 2
+        : f <= 2.5
+        ? 2.5
+        : f <= 5
+        ? 5
+        : 10;
+    return n * mag;
   }
 
   /// Least-squares linear trend line spanning the first and last x-index.
