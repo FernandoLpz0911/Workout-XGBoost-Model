@@ -38,6 +38,9 @@ class LogView extends StatelessWidget {
                 child: vm.session.isEmpty
                     ? _EmptySessionView(
                         onAdd: () => _showAddExercise(context, vm),
+                        onRepeat: vm.canRepeatLastWorkout
+                            ? vm.repeatLastWorkout
+                            : null,
                       )
                     : ListView.builder(
                         padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
@@ -150,7 +153,8 @@ class LogView extends StatelessWidget {
 /// Shown when no exercises have been added for the current day.
 class _EmptySessionView extends StatelessWidget {
   final VoidCallback onAdd;
-  const _EmptySessionView({required this.onAdd});
+  final VoidCallback? onRepeat;
+  const _EmptySessionView({required this.onAdd, this.onRepeat});
 
   @override
   Widget build(BuildContext context) {
@@ -189,6 +193,14 @@ class _EmptySessionView extends StatelessWidget {
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
             ),
           ),
+          if (onRepeat != null) ...[
+            const SizedBox(height: 12),
+            TextButton.icon(
+              onPressed: onRepeat,
+              icon: const Icon(Icons.replay),
+              label: const Text('Repeat Last Workout'),
+            ),
+          ],
         ],
       ),
     );

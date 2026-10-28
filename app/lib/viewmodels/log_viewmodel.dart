@@ -10,6 +10,7 @@ import 'package:repiq/services/local_recommendation_engine.dart';
 import 'package:repiq/services/local_storage_service.dart';
 import 'package:repiq/services/notification_service.dart';
 import 'package:repiq/services/personal_records.dart';
+import 'package:repiq/services/repeat_workout.dart';
 
 export '../models/recommendation_models.dart'
     show TrainingMode, ProgressionAlgorithm;
@@ -556,6 +557,28 @@ class LogViewModel extends ChangeNotifier with WidgetsBindingObserver {
     session.add(ex);
     _saveSessionOrder();
     notifyListeners();
+  }
+
+  /// Whether there is an earlier workout [repeatLastWorkout] can copy.
+  bool get canRepeatLastWorkout {
+    final today = _fmtDate(DateTime.now());
+    return history.any((s) => _fmtDate(s.date) != today);
+  }
+
+  /// Adds the exercises of the most recent earlier workout to today's
+  /// session, each with a fresh recommendation. Sets are not copied, since a
+  /// logged set means it was actually done.
+  void repeatLastWorkout() {
+    for (final (category, exercise) in lastWorkoutExercises(
+      history,
+      DateTime.now(),
+    )) {
+      addExercise(
+        category,
+        exercise,
+        algorithm: progressionAlgorithmFor(exercise),
+      );
+    }
   }
 
   void logSet(int exerciseIndex, WorkoutSet set) {
