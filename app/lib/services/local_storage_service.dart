@@ -199,8 +199,19 @@ class LocalStorageService {
   /// its relative order well-defined, without perturbing which calendar day
   /// it's grouped under.
   Future<int> importFromCsvText(String csvText) async {
+    final newSets = parseFitNotesCsv(csvText);
+    if (newSets.isEmpty) return 0;
+
+    final before = await count();
+    await appendSets(newSets);
+    final after = await count();
+    return after - before;
+  }
+
+  /// Parses a FitNotes CSV export into sets without touching storage.
+  static List<WorkoutSet> parseFitNotesCsv(String csvText) {
     final lines = csvText.replaceAll('\r\n', '\n').split('\n');
-    if (lines.length < 2) return 0;
+    if (lines.length < 2) return const [];
 
     final newSets = <WorkoutSet>[];
     final perDayOccurrence = <String, int>{};
@@ -259,12 +270,7 @@ class LocalStorageService {
         continue;
       }
     }
-    if (newSets.isEmpty) return 0;
-
-    final before = await count();
-    await appendSets(newSets);
-    final after = await count();
-    return after - before;
+    return newSets;
   }
 
   Future<Map<String, String>> loadTrainingModes() async {
