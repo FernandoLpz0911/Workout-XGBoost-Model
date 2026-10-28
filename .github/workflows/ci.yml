@@ -8,62 +8,6 @@ on:
   workflow_dispatch: {}
 
 jobs:
-  python-format:
-    name: Python — Format check
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install ruff
-        run: pip install ruff
-
-      - name: Check formatting
-        run: ruff format --check .
-
-  python-lint:
-    name: Python — Lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-          cache: pip
-
-      - name: Install ruff
-        run: pip install ruff
-
-      - name: Run linter
-        run: ruff check .
-
-  python-tests:
-    name: Python — Tests (3.${{ matrix.python-minor }})
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        python-minor: ["10", "12"]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.${{ matrix.python-minor }}"
-          cache: pip
-
-      - name: Install dependencies
-        run: pip install -r requirements.txt pytest pytest-cov httpx httpx2
-
-      - name: Run tests with coverage
-        run: pytest tests/ -v
-
   flutter-analyze:
     name: Flutter — Analyze & format check
     runs-on: ubuntu-latest
