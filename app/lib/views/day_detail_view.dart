@@ -67,7 +67,7 @@ class DayDetailView extends StatelessWidget {
           }
 
           final byExercise = <String, List<WorkoutSet>>{};
-          for (final s in sets) {
+          for (final s in [...sets]..sort((a, b) => a.date.compareTo(b.date))) {
             byExercise.putIfAbsent(s.exercise, () => []).add(s);
           }
 

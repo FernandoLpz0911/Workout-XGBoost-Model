@@ -126,6 +126,7 @@ extension WorkoutSetUnitDisplay on WorkoutSet {
       }
       return '${distance!.toStringAsFixed(2)} $u';
     }
+    if (weight == 0 && reps > 0) return '$reps reps';
     return '${lbsToDisplay(weight, unit).toStringAsFixed(1)} '
         '${weightUnitLabel(unit)} × $reps';
   }

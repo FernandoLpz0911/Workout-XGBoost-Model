@@ -66,8 +66,9 @@ class _DayCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // History is newest-first; show each day in the order it was lifted.
     final byExercise = <String, List<WorkoutSet>>{};
-    for (final s in sets) {
+    for (final s in [...sets]..sort((a, b) => a.date.compareTo(b.date))) {
       byExercise.putIfAbsent(s.exercise, () => []).add(s);
     }
     final cs = Theme.of(context).colorScheme;

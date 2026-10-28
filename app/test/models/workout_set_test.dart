@@ -203,6 +203,17 @@ void main() {
   });
 
   group('WorkoutSet — displayTextIn', () {
+    test('unweighted reps-only set shows just the reps', () {
+      final set = WorkoutSet(
+        date: DateTime.now(),
+        exercise: '30x30 Tabata Running',
+        category: 'Cardio',
+        weight: 0,
+        reps: 8,
+      );
+      expect(set.displayTextIn(WeightUnit.lbs), '8 reps');
+    });
+
     test('strength set shows weight in lbs when unit is lbs', () {
       final set = WorkoutSet(
         date: DateTime.now(),
