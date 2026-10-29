@@ -6,12 +6,13 @@ Submission: none (personal sprint) · Needs: tagged `demo` commit, release appbu
 Demo: local install on Android device/emulator; Play Store via `flutter build appbundle` · Team: solo + agents
 
 ## Sprint state
-- Phase: 5 (verify done; history rewrite + tag) · Build mode: parallel worktrees · Base branch: sprint/refactor
+- Phase: 6 (freeze; ran past 19:30 end) · Build mode: sequential · Base branch: sprint/refactor
 - Resumed: 2026-10-28 17:25 CDT · End: 19:30 CDT · Deploy deferred
-- Merged: T2–T5, set-order fix, log_view split, A (progress axis/default, Sauna repeat test), B (Log day nav + inline sets), C (exercise page Track/History/Graph), D (add-exercise picker), plateau-vs-momentum fix
-- Verified on phone: day nav/swipe, past day inline sets + PR badge, exercise tabs, picker recent+search, Progress default + axis, repeat incl. Sauna
+- Merged: T2–T5, set-order fix, log_view split, A (progress axis/default, Sauna repeat test), B (Log day nav + inline sets), C (exercise page Track/History/Graph), D (add-exercise picker), plateau-vs-momentum fix, hypertrophy double progression (3×10 then +step, 5 lb dumbbell steps), warm-up sets (TRACK switch + ramp chips, stored as "Warmup" note, W labels, excluded from charts/overview)
+- Verified on phone: day nav/swipe, past day inline sets + PR badge, exercise tabs, picker recent+search, Progress default + axis, repeat incl. Sauna, Incline DB suggests 40×8 with warm-up ramp 20×8 / 30×4, warm-up save shows W (test set deleted)
 - Cut: T6 appbundle/release signing (later), T7 plate calculator
-- Next: rewrite history to drop Claude author/trailers, force-push main + sprint/refactor, retag demo
+- History rewrite done (no Claude refs outside .claude/); backtest 83.8% achieved / 10.7% too aggressive / 5.9 lb MAE
+- Next: deployment (release signing, appbundle)
 
 ## Core loop
 Lifter opens app at gym → picks exercise → sees weight/rep recommendation → logs sets → next session's recommendation adapts.
