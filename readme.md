@@ -4,6 +4,8 @@
 
 RepIQ is a privacy-first workout tracking system that gives lifters session-by-session weight and rep recommendations backed by a per-user XGBoost model. It ships as two independent components: a fully offline Flutter mobile app and a local-first Python/FastAPI backend that trains and serves personalized models from disk — no cloud account, no managed database, no external dependency required to run it.
 
+<p align="center"><img src="docs/screenshot.png" alt="RepIQ onboarding screen" width="300"></p>
+
 ---
 
 ## What RepIQ Does
